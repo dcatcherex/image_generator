@@ -25,12 +25,21 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "At least one reference image is required" }, { status: 400 });
   }
 
+  const mask = form.get("mask");
+  if (mask instanceof File && files.length !== 1) {
+    return NextResponse.json(
+      { error: "A mask can only be used with a single reference image" },
+      { status: 400 }
+    );
+  }
+
   const openai = getOpenAI();
 
   try {
     const result = await openai.images.edit({
       model,
       image: files.length === 1 ? files[0] : files,
+      ...(mask instanceof File ? { mask } : {}),
       prompt,
       size: size as OpenAI.ImageEditParams["size"],
       quality: quality as OpenAI.ImageEditParams["quality"],

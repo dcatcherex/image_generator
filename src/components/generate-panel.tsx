@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState } from "react";
 import Image from "next/image";
-import { Loader2, Sparkles, Upload, Wand2, X } from "lucide-react";
+import { Loader2, Paintbrush2, Sparkles, Upload, Wand2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { MaskEditor } from "@/components/mask-editor";
 import { MODELS, QUALITY_OPTIONS, SIZE_OPTIONS } from "@/lib/openai";
 import { estimateCost } from "@/lib/pricing";
 import type { useImageStream } from "@/lib/use-image-stream";
@@ -41,11 +42,16 @@ export function GeneratePanel({
   const [background, setBackground] = useState<string>("auto");
   const [model, setModel] = useState<string>(MODELS.generate);
   const [isEditing, setIsEditing] = useState(false);
+  const [maskFile, setMaskFile] = useState<File | null>(null);
+  const [maskOwnerKey, setMaskOwnerKey] = useState<string | null>(null);
+  const [maskEditorOpen, setMaskEditorOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { generate, isGenerating, error } = generateStream;
 
   const cost = useMemo(() => estimateCost(quality, size), [quality, size]);
+  const maskableItem = referenceItems.length === 1 ? referenceItems[0] : null;
+  const activeMask = maskableItem && maskableItem.key === maskOwnerKey ? maskFile : null;
 
   function handleModeChange(nextMode: "generate" | "edit") {
     setMode(nextMode);
@@ -90,6 +96,7 @@ export function GeneratePanel({
         JSON.stringify(referenceItems.map((r) => r.sourceImageId).filter(Boolean))
       );
       referenceItems.forEach((item) => form.append("images", item.file));
+      if (activeMask) form.set("mask", activeMask);
 
       const res = await fetch("/api/edit", { method: "POST", body: form });
       const data = await res.json();
@@ -173,9 +180,51 @@ export function GeneratePanel({
             <p className="text-xs text-muted-foreground">
               Upload from disk, or click &ldquo;Use as reference&rdquo; on any gallery image.
             </p>
+
+            {maskableItem && (
+              <div className="flex items-center gap-2 rounded-md border px-3 py-2">
+                <Paintbrush2 className="size-3.5 text-muted-foreground shrink-0" />
+                <span className="flex-1 text-xs text-muted-foreground">
+                  {activeMask ? "Mask applied — only painted areas will change" : "No mask — the whole image may change"}
+                </span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => setMaskEditorOpen(true)}
+                >
+                  {activeMask ? "Edit mask" : "Draw mask"}
+                </Button>
+                {activeMask && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={() => setMaskFile(null)}
+                  >
+                    Clear
+                  </Button>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>
+
+      {maskableItem && (
+        <MaskEditor
+          open={maskEditorOpen}
+          onOpenChange={setMaskEditorOpen}
+          imageUrl={maskableItem.previewUrl}
+          initialMask={activeMask}
+          onSave={(file) => {
+            setMaskFile(file);
+            setMaskOwnerKey(maskableItem.key);
+          }}
+        />
+      )}
 
       <div className="shrink-0 flex flex-col gap-4 p-4 pt-3 border-t">
         <div className="grid grid-cols-2 gap-3">
