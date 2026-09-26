@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { ImageIcon } from "lucide-react";
+import { UserButton } from "@clerk/nextjs";
 import { GeneratePanel } from "@/components/generate-panel";
 import { Gallery } from "@/components/gallery";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -48,7 +49,10 @@ export default function Home() {
           <ImageIcon className="size-4" />
           Image Studio
         </h1>
-        <ThemeToggle />
+        <div className="flex items-center gap-3">
+          <ThemeToggle />
+          <UserButton />
+        </div>
       </header>
 
       <div className="flex flex-col lg:flex-row-reverse flex-1 min-h-0">
