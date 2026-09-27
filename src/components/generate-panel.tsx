@@ -1,8 +1,7 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
-import Image from "next/image";
-import { Loader2, Maximize, Paintbrush2, Sparkles, Upload, X } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Loader2, Maximize, Paintbrush2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -18,6 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { MaskEditor } from "@/components/mask-editor";
+import { ReferenceImagesPicker } from "@/components/reference-images-picker";
 import {
   ASPECT_RATIOS,
   MODEL,
@@ -28,7 +28,7 @@ import {
 import { estimateCost, formatCostThb } from "@/lib/pricing";
 import { ASSIGNABLE_TAGS } from "@/lib/tags";
 import type { useImageStream } from "@/lib/use-image-stream";
-import { referenceItemFromFile, type ReferenceItem } from "@/lib/reference-items";
+import type { ReferenceItem } from "@/lib/reference-items";
 import type { BatchJobRecord, ImageRecord } from "@/lib/types";
 
 // OpenAI's real Batch API discount, applied to the same estimateCost() number.
@@ -82,7 +82,6 @@ export function GeneratePanel({
   const [maskFile, setMaskFile] = useState<File | null>(null);
   const [maskOwnerKey, setMaskOwnerKey] = useState<string | null>(null);
   const [maskEditorOpen, setMaskEditorOpen] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { generate, isGenerating, error } = generateStream;
 
@@ -178,12 +177,6 @@ export function GeneratePanel({
     }
   }
 
-  function addFiles(files: FileList | null) {
-    if (!files) return;
-    const items = Array.from(files).map(referenceItemFromFile);
-    setReferenceItems([...referenceItems, ...items]);
-  }
-
   return (
     <div className="flex flex-col h-full min-h-0">
       <div className="flex flex-1 min-h-0 flex-col gap-4 p-4">
@@ -211,38 +204,7 @@ export function GeneratePanel({
         </div>
 
         <div className="shrink-0 flex flex-col gap-2">
-          <Label>Reference images</Label>
-          <div className="flex flex-wrap gap-2">
-            {referenceItems.map((item) => (
-              <div key={item.key} className="relative size-16 rounded-md overflow-hidden border">
-                <Image src={item.previewUrl} alt="reference" fill className="object-cover" unoptimized />
-                <button
-                  onClick={() => setReferenceItems(referenceItems.filter((r) => r.key !== item.key))}
-                  className="absolute top-0.5 right-0.5 bg-background/80 rounded-full p-0.5"
-                >
-                  <X className="size-3" />
-                </button>
-              </div>
-            ))}
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="size-16 rounded-md border border-dashed flex items-center justify-center text-muted-foreground hover:bg-muted/50"
-            >
-              <Upload className="size-4" />
-            </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              multiple
-              className="hidden"
-              onChange={(e) => addFiles(e.target.files)}
-            />
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Upload from disk, or click &ldquo;Use as reference&rdquo; on any gallery image — adding one
-            switches to editing automatically.
-          </p>
+          <ReferenceImagesPicker items={referenceItems} onChange={setReferenceItems} />
 
           {maskableItem && (
             <div className="flex items-center gap-2 rounded-md border px-3 py-2">

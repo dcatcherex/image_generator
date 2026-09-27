@@ -6,6 +6,7 @@ import { UserButton } from "@clerk/nextjs";
 import { GeneratePanel } from "@/components/generate-panel";
 import { Gallery } from "@/components/gallery";
 import { SettingsDialog } from "@/components/settings-dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { referenceItemFromImage, type ReferenceItem } from "@/lib/reference-items";
 import { useImageStream } from "@/lib/use-image-stream";
 import { useGalleryView } from "@/lib/use-gallery-view";
@@ -105,7 +106,7 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="flex-1 min-h-0 overflow-y-auto flex flex-col">
+          <ScrollArea className="flex-1 min-h-0">
             <GeneratePanel
               onImageCreated={handleImageCreated}
               onBatchSubmitted={handleBatchSubmitted}
@@ -115,7 +116,7 @@ export default function Home() {
               isEditing={isEditing}
               setIsEditing={setIsEditing}
             />
-          </div>
+          </ScrollArea>
         </div>
 
         {loading ? (

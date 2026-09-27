@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ImageCard } from "@/components/image-card";
 import { ImageLightbox } from "@/components/image-lightbox";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { ALL_TAGS_FILTER, TAG_FILTER_OPTIONS } from "@/lib/tags";
 import type { GalleryViewMode } from "@/lib/use-gallery-view";
 import { distributeIntoColumns, estimateAspectRatio } from "@/lib/masonry";
@@ -208,24 +209,24 @@ export function Gallery({
           No images yet. Generate your first one on the right.
         </div>
       ) : view === "masonry" && masonryColumns ? (
-        <div className="overflow-y-auto pb-4">
-          <div className="flex gap-3 items-start">
+        <ScrollArea className="flex-1 min-h-0">
+          <div className="flex gap-3 items-start pb-4">
             {masonryColumns.map((column, i) => (
               <div key={i} className="flex flex-1 min-w-0 flex-col gap-3">
                 {column.map(renderCard)}
               </div>
             ))}
           </div>
-        </div>
+        </ScrollArea>
       ) : (
-        <div className="overflow-y-auto pb-4">
+        <ScrollArea className="flex-1 min-h-0">
           <div
-            className="grid gap-3"
+            className="grid gap-3 pb-4"
             style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
           >
             {renderItems.map(renderCard)}
           </div>
-        </div>
+        </ScrollArea>
       )}
 
       {lightboxIndex !== null && filtered[lightboxIndex] && (

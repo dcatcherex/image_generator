@@ -6,6 +6,7 @@ import { ChevronLeft, ChevronRight, Download, Heart, Layers, Loader2, Tag as Tag
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Select,
   SelectContent,
@@ -155,7 +156,9 @@ export function ImageLightbox({
         )}
       </div>
 
-      <div className="flex w-[280px] shrink-0 flex-col gap-4 border-l bg-background p-4 overflow-y-auto">
+      <div className="flex w-[280px] shrink-0 flex-col border-l bg-background">
+      <ScrollArea className="flex-1 min-h-0">
+      <div className="flex flex-col gap-4 p-4">
         <div className="flex items-center gap-2">
           <Badge variant="secondary" className="text-[10px] font-mono">
             {image.sourceType}
@@ -213,8 +216,12 @@ export function ImageLightbox({
           </Button>
         </div>
       </div>
+      </ScrollArea>
+      </div>
 
-      <div className="flex w-20 shrink-0 flex-col gap-1.5 overflow-y-auto border-l bg-background p-2">
+      <div className="flex w-20 shrink-0 flex-col border-l bg-background">
+      <ScrollArea className="flex-1 min-h-0">
+      <div className="flex flex-col gap-1.5 p-2">
         {images.map((img, i) => (
           <button
             key={img.id}
@@ -227,6 +234,8 @@ export function ImageLightbox({
             <Image src={img.blobUrl} alt={img.prompt} fill className="object-cover" unoptimized />
           </button>
         ))}
+      </div>
+      </ScrollArea>
       </div>
     </div>
   );

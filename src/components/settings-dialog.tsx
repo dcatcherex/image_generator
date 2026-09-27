@@ -5,6 +5,7 @@ import { Columns3, LayoutGrid, Monitor, Moon, Settings as SettingsIcon, Sun } fr
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Dialog,
   DialogContent,
@@ -75,7 +76,8 @@ export function SettingsDialog({
             ))}
           </div>
 
-          <div className="flex-1 overflow-y-auto p-5">
+          <ScrollArea className="flex-1 min-h-0">
+          <div className="p-5">
             <h3 className="mb-4 text-sm font-semibold">Appearance</h3>
             <div className="flex items-center justify-between gap-4">
               <span className="text-sm">Theme</span>
@@ -141,6 +143,7 @@ export function SettingsDialog({
               onValueChange={(v) => setColumns(Array.isArray(v) ? v[0] : v)}
             />
           </div>
+          </ScrollArea>
         </div>
       </DialogContent>
     </Dialog>

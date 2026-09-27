@@ -153,4 +153,30 @@
     line-height: 1.3;
     letter-spacing: -0.2px;
   }
+
+  /* Native form controls (e.g. <textarea>) can't use the ScrollArea primitive without
+     breaking text selection/caret behavior, so give them a matching thin, auto-hiding
+     scrollbar via the browser's own scrollbar styling APIs instead. */
+  textarea {
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+  }
+  textarea:hover,
+  textarea:focus {
+    scrollbar-color: var(--border) transparent;
+  }
+  textarea::-webkit-scrollbar {
+    width: 6px;
+  }
+  textarea::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  textarea::-webkit-scrollbar-thumb {
+    background: transparent;
+    border-radius: 9999px;
+  }
+  textarea:hover::-webkit-scrollbar-thumb,
+  textarea:focus::-webkit-scrollbar-thumb {
+    background: var(--border);
+  }
 }
