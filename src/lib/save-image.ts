@@ -6,8 +6,8 @@ import { estimateCost } from "./pricing";
 import type { ImageRecord } from "./types";
 
 function contentTypeFor(format: string) {
-  if (format === "jpeg") return "image/jpeg";
   if (format === "webp") return "image/webp";
+  if (format === "jpeg") return "image/jpeg";
   return "image/png";
 }
 
@@ -22,6 +22,7 @@ export async function persistGeneratedImage(params: {
   background: string;
   sourceType: "generate" | "edit";
   referenceImageIds?: string[];
+  tag?: string | null;
 }): Promise<ImageRecord> {
   const buffer = Buffer.from(params.b64, "base64");
   const pathname = `images/${randomUUID()}.${params.format}`;
@@ -49,6 +50,7 @@ export async function persistGeneratedImage(params: {
       sourceType: params.sourceType,
       referenceImageIds: params.referenceImageIds ?? [],
       costEstimate: cost,
+      tag: params.tag ?? null,
     })
     .returning();
 
@@ -64,6 +66,7 @@ export async function persistGeneratedImage(params: {
     blobUrl: row.blobUrl,
     blobPathname: row.blobPathname,
     favorite: row.favorite,
+    tag: row.tag,
     sourceType: row.sourceType as "generate" | "edit",
     referenceImageIds: row.referenceImageIds ?? [],
     costEstimate: row.costEstimate,

@@ -3,6 +3,9 @@ import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 const isPublicRoute = createRouteMatcher([
   "/sign-in(.*)",
   "/sign-up(.*)",
+  // Vercel Cron invokes this with no Clerk session — it authenticates itself via
+  // CRON_SECRET inside the route handler instead (see src/app/api/batch/cron/route.ts).
+  "/api/batch/cron(.*)",
 ]);
 
 export default clerkMiddleware(async (auth, req) => {

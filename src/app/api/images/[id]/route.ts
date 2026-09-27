@@ -9,9 +9,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const body = await req.json();
   const db = getDb();
 
+  const updates: Partial<typeof images.$inferInsert> = {};
+  if ("favorite" in body) updates.favorite = Boolean(body.favorite);
+  if ("tag" in body) {
+    // null/empty clears the tag; ASSIGNABLE_TAGS validation happens client-side (fixed
+    // select), so we just trust the value here rather than re-importing the list server-side.
+    updates.tag = body.tag ? String(body.tag) : null;
+  }
+
   const [row] = await db
     .update(images)
-    .set({ favorite: Boolean(body.favorite) })
+    .set(updates)
     .where(eq(images.id, id))
     .returning();
 

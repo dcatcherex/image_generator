@@ -7,15 +7,21 @@ export function useImageStream() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [partialB64, setPartialB64] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Number of images still expected in the current batch (n > 1 requests skip live
+  // previews, so the gallery just shows this many pulsing placeholder tiles and
+  // counts them down as each "done" event arrives).
+  const [pendingCount, setPendingCount] = useState(0);
 
   const generate = useCallback(
     async (
       payload: Record<string, unknown>,
       onDone: (image: ImageRecord) => void
     ) => {
+      const requested = Math.max(Number(payload.n) || 1, 1);
       setIsGenerating(true);
       setPartialB64(null);
       setError(null);
+      setPendingCount(requested);
 
       try {
         const res = await fetch("/api/generate", {
@@ -49,6 +55,7 @@ export function useImageStream() {
               setPartialB64(event.b64);
             } else if (event.type === "done") {
               setPartialB64(null);
+              setPendingCount((prev) => Math.max(0, prev - 1));
               onDone(event.image);
             } else if (event.type === "error") {
               setError(event.message);
@@ -59,10 +66,11 @@ export function useImageStream() {
         setError(err instanceof Error ? err.message : "Generation failed");
       } finally {
         setIsGenerating(false);
+        setPendingCount(0);
       }
     },
     []
   );
 
-  return { generate, isGenerating, partialB64, error };
+  return { generate, isGenerating, partialB64, error, pendingCount };
 }

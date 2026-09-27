@@ -2,12 +2,14 @@
 
 import { useMemo, useRef, useState } from "react";
 import Image from "next/image";
-import { Loader2, Paintbrush2, Sparkles, Upload, Wand2, X } from "lucide-react";
+import { Loader2, Maximize, Paintbrush2, Sparkles, Upload, Wand2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Select,
   SelectContent,
@@ -17,31 +19,68 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MaskEditor } from "@/components/mask-editor";
-import { MODELS, QUALITY_OPTIONS, SIZE_OPTIONS } from "@/lib/openai";
-import { estimateCost } from "@/lib/pricing";
+import {
+  ASPECT_RATIOS,
+  MODEL_OPTIONS,
+  N_OPTIONS,
+  QUALITY_OPTIONS,
+  sizeFromAspectRatio,
+} from "@/lib/openai";
+import { estimateCost, formatCostThb } from "@/lib/pricing";
+import { ASSIGNABLE_TAGS } from "@/lib/tags";
 import type { useImageStream } from "@/lib/use-image-stream";
 import { referenceItemFromFile, type ReferenceItem } from "@/lib/reference-items";
-import type { ImageRecord } from "@/lib/types";
+import type { BatchJobRecord, ImageRecord } from "@/lib/types";
+
+// OpenAI's real Batch API discount, applied to the same estimateCost() number.
+const ECONOMY_DISCOUNT = 0.5;
+
+// SelectValue in this codebase renders the raw selected value as its label (see how
+// "png"/"medium" etc. display verbatim elsewhere), so the "no tag" sentinel needs to be
+// human-readable itself rather than an internal token like "__none__".
+const NO_TAG = "No tag";
+
+function AspectRatioIcon({ ratio }: { ratio: readonly [number, number] | null }) {
+  if (!ratio) return <Maximize className="size-4" />;
+  const [w, h] = ratio;
+  const long = 16;
+  const width = w >= h ? long : Math.round(long * (w / h));
+  const height = h >= w ? long : Math.round(long * (h / w));
+  return (
+    <div className="flex h-4 items-center justify-center">
+      <div className="rounded-[2px] border border-current" style={{ width, height }} />
+    </div>
+  );
+}
 
 export function GeneratePanel({
   onImageCreated,
+  onBatchSubmitted,
   referenceItems,
   setReferenceItems,
   generateStream,
+  isEditing,
+  setIsEditing,
 }: {
   onImageCreated: (image: ImageRecord) => void;
+  onBatchSubmitted: (job: BatchJobRecord) => void;
   referenceItems: ReferenceItem[];
   setReferenceItems: (items: ReferenceItem[]) => void;
   generateStream: ReturnType<typeof useImageStream>;
+  isEditing: boolean;
+  setIsEditing: (v: boolean) => void;
 }) {
   const [mode, setMode] = useState<"generate" | "edit">("generate");
   const [prompt, setPrompt] = useState("");
-  const [size, setSize] = useState<string>("1024x1024");
+  const [aspectRatio, setAspectRatio] = useState<string>("auto");
   const [quality, setQuality] = useState<string>("medium");
-  const [format, setFormat] = useState<string>("png");
+  const [format, setFormat] = useState<string>("webp");
   const [background, setBackground] = useState<string>("auto");
-  const [model, setModel] = useState<string>(MODELS.generate);
-  const [isEditing, setIsEditing] = useState(false);
+  const [model, setModel] = useState<string>(MODEL_OPTIONS[0]);
+  const [n, setN] = useState<number>(1);
+  const [tag, setTag] = useState<string>(NO_TAG);
+  const [economyMode, setEconomyMode] = useState(false);
+  const [isSubmittingBatch, setIsSubmittingBatch] = useState(false);
   const [maskFile, setMaskFile] = useState<File | null>(null);
   const [maskOwnerKey, setMaskOwnerKey] = useState<string | null>(null);
   const [maskEditorOpen, setMaskEditorOpen] = useState(false);
@@ -49,15 +88,22 @@ export function GeneratePanel({
 
   const { generate, isGenerating, error } = generateStream;
 
-  const cost = useMemo(() => estimateCost(quality, size), [quality, size]);
+  const size = useMemo(() => {
+    const selected = ASPECT_RATIOS.find((ar) => ar.label === aspectRatio);
+    return selected?.ratio ? sizeFromAspectRatio(selected.ratio[0], selected.ratio[1]) : "auto";
+  }, [aspectRatio]);
+
+  const cost = useMemo(() => {
+    const base = estimateCost(quality, size) * (mode === "generate" ? n : 1);
+    return mode === "generate" && economyMode ? base * ECONOMY_DISCOUNT : base;
+  }, [quality, size, mode, n, economyMode]);
   const maskableItem = referenceItems.length === 1 ? referenceItems[0] : null;
   const activeMask = maskableItem && maskableItem.key === maskOwnerKey ? maskFile : null;
 
   function handleModeChange(nextMode: "generate" | "edit") {
     setMode(nextMode);
-    setModel(nextMode === "generate" ? MODELS.generate : MODELS.edit);
   }
-  const busy = isGenerating || isEditing;
+  const busy = isGenerating || isEditing || isSubmittingBatch;
 
   async function handleSubmit() {
     if (!prompt.trim()) {
@@ -65,15 +111,44 @@ export function GeneratePanel({
       return;
     }
 
+    const tagValue = tag === NO_TAG ? null : tag;
+
+    if (mode === "generate" && economyMode) {
+      setIsSubmittingBatch(true);
+      try {
+        const res = await fetch("/api/batch/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt, size, quality, format, background, model, n, tag: tagValue }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Batch submission failed");
+        onBatchSubmitted(data.job);
+        toast.success(
+          `Batch submitted (${data.job.requestCount} image${data.job.requestCount > 1 ? "s" : ""}) — results in minutes to 24h`
+        );
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Batch submission failed");
+      } finally {
+        setIsSubmittingBatch(false);
+      }
+      return;
+    }
+
     if (mode === "generate") {
+      let created = 0;
       await generate(
-        { prompt, size, quality, format, background, model },
+        { prompt, size, quality, format, background, model, n, tag: tagValue },
         (image) => {
           onImageCreated(image);
-          toast.success("Image generated");
+          created++;
         }
       );
-      if (error) toast.error(error);
+      if (error) {
+        toast.error(error);
+      } else if (created > 0) {
+        toast.success(created > 1 ? `${created} images generated` : "Image generated");
+      }
       return;
     }
 
@@ -97,6 +172,7 @@ export function GeneratePanel({
       );
       referenceItems.forEach((item) => form.append("images", item.file));
       if (activeMask) form.set("mask", activeMask);
+      if (tagValue) form.set("tag", tagValue);
 
       const res = await fetch("/api/edit", { method: "POST", body: form });
       const data = await res.json();
@@ -227,14 +303,56 @@ export function GeneratePanel({
       )}
 
       <div className="shrink-0 flex flex-col gap-4 p-4 pt-3 border-t">
+        {mode === "generate" && (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <div className="flex items-center justify-between rounded-md border px-3 py-2">
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="economy-mode" className="text-sm">Economy mode</Label>
+                    <Badge variant="secondary" className="text-[10px]">~50% cheaper</Badge>
+                  </div>
+                  <Switch
+                    id="economy-mode"
+                    checked={economyMode}
+                    onCheckedChange={(v) => setEconomyMode(Boolean(v))}
+                  />
+                </div>
+              }
+            />
+            <TooltipContent>
+              ~50% cheaper via OpenAI&rsquo;s Batch API — results may take minutes up to 24 hours
+              instead of appearing instantly.
+            </TooltipContent>
+          </Tooltip>
+        )}
+
         <div className="grid grid-cols-2 gap-3">
+          {mode === "generate" && (
+            <div className="flex flex-col gap-1.5">
+              <Label>Batch (n)</Label>
+              <Select value={String(n)} onValueChange={(v) => v && setN(Number(v))}>
+                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {N_OPTIONS.map((opt) => (
+                    <SelectItem key={opt} value={String(opt)}>{opt}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           <div className="flex flex-col gap-1.5">
-            <Label>Size</Label>
-            <Select value={size} onValueChange={(v) => v && setSize(v)}>
+            <Label>Size {size !== "auto" && <span className="text-muted-foreground font-normal">({size})</span>}</Label>
+            <Select value={aspectRatio} onValueChange={(v) => v && setAspectRatio(v)}>
               <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
               <SelectContent>
-                {SIZE_OPTIONS.map((s) => (
-                  <SelectItem key={s} value={s}>{s}</SelectItem>
+                {ASPECT_RATIOS.map((ar) => (
+                  <SelectItem key={ar.label} value={ar.label}>
+                    <span className="flex items-center gap-2">
+                      <AspectRatioIcon ratio={ar.ratio} />
+                      {ar.label}
+                    </span>
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -275,12 +393,26 @@ export function GeneratePanel({
         </div>
 
         <div className="flex flex-col gap-1.5">
+          <Label>Tag</Label>
+          <Select value={tag} onValueChange={(v) => v && setTag(v)}>
+            <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value={NO_TAG}>{NO_TAG}</SelectItem>
+              {ASSIGNABLE_TAGS.map((t) => (
+                <SelectItem key={t} value={t}>{t}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="flex flex-col gap-1.5">
           <Label>Model</Label>
           <Select value={model} onValueChange={(v) => v && setModel(v)}>
             <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value={MODELS.generate}>{MODELS.generate}</SelectItem>
-              <SelectItem value={MODELS.edit}>{MODELS.edit}</SelectItem>
+              {MODEL_OPTIONS.map((m) => (
+                <SelectItem key={m} value={m}>{m}</SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
@@ -288,13 +420,13 @@ export function GeneratePanel({
         <Button onClick={handleSubmit} disabled={busy} className="w-full gap-2 justify-between">
           <span className="flex items-center gap-2">
             {busy ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
-            {mode === "generate" ? "Generate" : "Apply edit"}
+            {mode === "generate" ? (economyMode ? "Submit batch" : "Generate") : "Apply edit"}
           </span>
           <Badge
             variant="outline"
             className="font-mono text-[10px] border-primary-foreground/30 text-primary-foreground"
           >
-            ~${cost.toFixed(3)}
+            ~{formatCostThb(cost)}
           </Badge>
         </Button>
       </div>

@@ -24,7 +24,12 @@ Do these roughly in order — later tasks assume auth/deploy is solid, but each 
 
 ---
 
-### 1. Close the Clerk production-keys gap
+### 1. Close the Clerk production-keys gap — RESOLVED/DEFERRED
+
+**User decided to stay on Clerk development keys for now — revisit later if usage limits become a problem.** No code change made; do not touch Clerk config unless the user brings this back up.
+
+<details>
+<summary>Original task text (kept for reference if this is revisited)</summary>
 
 **Why it matters**: the app is publicly deployed but still running Clerk *development* keys, which have strict usage limits and print a "Development mode" badge on the sign-in page. Not production-safe long-term.
 
@@ -39,6 +44,8 @@ Do these roughly in order — later tasks assume auth/deploy is solid, but each 
 6. Verify the "Development mode" badge is gone on the live sign-in page.
 
 **Acceptance criteria**: live sign-in page shows no dev-mode badge; `clerk doctor` reports a healthy production instance.
+
+</details>
 
 ---
 
@@ -71,7 +78,9 @@ Do these roughly in order — later tasks assume auth/deploy is solid, but each 
 
 ---
 
-### 4. Batch generation (n > 1)
+### 4. Batch generation (n > 1) — DONE
+
+**Not to be confused with "Economy mode" (§10 below)** — this task is the `n` selector that sends multiple images in one synchronous request at full price. The real OpenAI Batch API (async, ~50% cheaper) is a separate, later addition — see §10.
 
 **Why it matters**: currently every generation produces exactly one image; seeing a few variations at once is a common workflow.
 
@@ -81,7 +90,7 @@ Do these roughly in order — later tasks assume auth/deploy is solid, but each 
 3. Gallery placeholder logic (`gallery.tsx`) currently renders one "Rendering..." tile — extend to render `n` tiles.
 4. Cost badge (`pricing.ts` usage in `generate-panel.tsx`) should multiply by `n`.
 
-**Acceptance criteria**: setting n=4 produces 4 distinct images from one submit, each streaming its own live preview, each saved as a separate DB row.
+**Acceptance criteria**: setting n=4 produces 4 distinct images from one submit, each saved as a separate DB row. **Implementation note**: n=1 keeps live streaming/partial-preview exactly as before; n>1 uses a non-streaming call and emits one synthetic "done" SSE event per image as it's persisted (see `src/app/api/generate/route.ts`) — OpenAI's streaming events have no documented field disambiguating which image-of-a-batch a partial belongs to when n>1, so streaming was deliberately not attempted for the batch case rather than guessing.
 
 ---
 
@@ -105,6 +114,32 @@ Do these roughly in order — later tasks assume auth/deploy is solid, but each 
 **Scope decision needed**: ask the user how much test investment they want for a personal tool — this could be skipped entirely, or scoped to just the trickiest logic (SSE parsing in `use-image-stream.ts`, mask canvas math in `mask-editor.tsx`).
 
 **If pursued**: this project doesn't have a test runner configured yet (no Vitest/Jest/Playwright in `package.json`). Start with picking one and wiring it up before writing tests.
+
+---
+
+### 10. "Economy mode" — real OpenAI Batch API — DONE (needs one manual step: `CRON_SECRET`)
+
+**What this is**: a separate, opt-in path alongside the normal instant-generate flow (including the n=1/2/4 selector from §4, which stays untouched as the default). Submits via OpenAI's actual async Batch API — upload a `.jsonl`, OpenAI processes within up to 24h (often faster, no guarantee), costs ~50% less. Toggle lives in `generate-panel.tsx` next to Model/n ("Economy mode" switch, only shown in Generate mode — not wired up for Edit).
+
+**New pieces**:
+- **DB**: new `batch_jobs` table (`src/db/schema.ts`) — separate from `images` since a batch job has its own lifecycle spanning multiple not-yet-existing images. Status mirrors OpenAI's (`validating|in_progress|finalizing|completed|expired|cancelling|cancelled|failed`) plus our own `ingested` once we've turned a completed batch's output into real `images` rows (guards against double-persisting on repeat polls).
+- **Routes**:
+  - `POST /api/batch/generate` — submits a new batch (builds `.jsonl`, uploads via `openai.files.create`, creates via `openai.batches.create`, inserts a `batch_jobs` row).
+  - `GET /api/batch` — lists non-terminal `batch_jobs` rows (Clerk-protected, used by the gallery to render "Pending — up to 24h" placeholder tiles).
+  - `POST /api/batch/poll` — client-triggered convenience poll (Clerk-protected); calls the shared `checkAndIngestPendingBatches()` in `src/lib/batch-poll.ts`.
+  - `GET /api/batch/cron` — the reliability backstop, hit by Vercel Cron (see `vercel.json`, every 15 min). **Deliberately excluded from Clerk auth** in `src/proxy.ts` (Vercel's cron invocation carries no Clerk session) — instead checks `Authorization: Bearer $CRON_SECRET` itself and fails closed (500) if `CRON_SECRET` isn't set.
+- **Ingestion logic** (`src/lib/batch-poll.ts`): when a batch flips to `completed`, fetches the output file, parses each line's `custom_id` (results are **not** guaranteed to be in the same order as submitted — always correlate by `custom_id`, never position), looks up the original params from the `requests` jsonb column, and calls the same `persistGeneratedImage()` the instant flow uses. Partial failures (some lines succeed, some don't) are handled gracefully — failed `custom_id`s are logged and skipped, not treated as a fatal error for the whole batch.
+- **Gallery**: `page.tsx` fetches `GET /api/batch` on mount and polls `POST /api/batch/poll` every 45s while anything is pending, so placeholder tiles **survive a page reload** (unlike the existing live-stream "Rendering..." tiles, which only exist in client memory during an active SSE connection) — this is the whole reason batch jobs get their own DB table instead of being client-only state.
+
+**⚠️ One manual step still needed**: set a `CRON_SECRET` env var (random string, 16+ chars) on the Vercel project — **and add it to `.env.local` too if you ever want to test the cron route locally**. Without it, `/api/batch/cron` always returns 500 "CRON_SECRET not configured" (fails closed, doesn't run unauthenticated — this is intentional, not a bug). Vercel automatically sends `Authorization: Bearer $CRON_SECRET` on cron invocations once the env var exists; no other wiring needed.
+
+**Ambiguities resolved conservatively** (per the coordinator's "make the simpler choice and note it" guidance — revisit if they don't fit real usage):
+- Cron schedule set to every 15 minutes in `vercel.json`. **If this project is on Vercel's Hobby plan, Vercel silently limits cron jobs to once per day** — check the plan tier; if Hobby, either upgrade or accept that the cron backstop only fires daily (the client-side 45s poll still covers the "tab is open" case regardless).
+- The batch submit form's `n` (copy count) reuses the exact same 1/2/4 options and cap as the instant-generate `N_OPTIONS` (`src/lib/openai.ts`), for consistency — not a hard OpenAI limit (Batch API supports far more per file).
+- Economy mode is Generate-only, not wired up for the Edit/Reference tab — OpenAI's Batch API does support `/v1/images/edits` too, but the request said "the same shape of params the normal generate form does," so Edit was left out of scope rather than assumed.
+- No cancel-a-pending-batch UI was built (OpenAI's `openai.batches.cancel()` exists and would be easy to wire up if wanted).
+
+**Verification status**: lint/build clean; UI (toggle, cost-badge discount, submit flow, pending-tile rendering/countdown, toast) verified live with `window.fetch` mocked — no real OpenAI Batch API calls were made this session (that costs real money and the real turnaround is up to 24h, impractical to verify live). The ingestion logic (`checkAndIngestPendingBatches` in `src/lib/batch-poll.ts`) and the request/response shapes it assumes were verified by careful reading of the `openai` npm package's own TypeScript definitions (`node_modules/openai/resources/batches.d.ts`, `files.d.ts`, `images.d.ts`) rather than by a live end-to-end run — **a real batch completing and getting correctly ingested has not been observed**, only code-reviewed against the SDK's documented types. Sanity-test with a real (small, cheap) batch before relying on this.
 
 ---
 

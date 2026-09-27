@@ -16,6 +16,14 @@ import { Slider } from "@/components/ui/slider";
 
 const MAX_DISPLAY = 480;
 
+// The dialog uses `max-w-fit`, so nothing else caps its width — on a narrow viewport
+// (mobile) a flat 480px display size would overflow the screen and force horizontal
+// scroll. Shrink to fit the viewport (minus room for dialog padding/margins) instead.
+function getMaxDisplay() {
+  if (typeof window === "undefined") return MAX_DISPLAY;
+  return Math.max(160, Math.min(MAX_DISPLAY, window.innerWidth - 64));
+}
+
 export function MaskEditor({
   open,
   onOpenChange,
@@ -49,7 +57,8 @@ export function MaskEditor({
     const canvas = canvasRef.current;
     if (!img || !canvas) return;
 
-    const scale = Math.min(MAX_DISPLAY / img.naturalWidth, MAX_DISPLAY / img.naturalHeight, 1);
+    const maxDisplay = getMaxDisplay();
+    const scale = Math.min(maxDisplay / img.naturalWidth, maxDisplay / img.naturalHeight, 1);
     setDisplaySize({
       width: Math.round(img.naturalWidth * scale),
       height: Math.round(img.naturalHeight * scale),

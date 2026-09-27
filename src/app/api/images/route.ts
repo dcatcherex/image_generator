@@ -7,11 +7,13 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const q = searchParams.get("q")?.trim();
   const favoritesOnly = searchParams.get("favorites") === "true";
+  const tag = searchParams.get("tag")?.trim();
 
   const db = getDb();
   const conditions = [];
   if (q) conditions.push(ilike(images.prompt, `%${q}%`));
   if (favoritesOnly) conditions.push(eq(images.favorite, true));
+  if (tag) conditions.push(eq(images.tag, tag));
 
   const rows = await db
     .select()

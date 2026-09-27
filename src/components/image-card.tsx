@@ -2,21 +2,30 @@
 
 import { useState } from "react";
 import Image from "next/image";
-import { Download, Heart, Layers, Loader2, Trash2 } from "lucide-react";
+import { Download, Heart, Layers, Loader2, Tag as TagIcon, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+} from "@/components/ui/select";
+import { ASSIGNABLE_TAGS } from "@/lib/tags";
 import type { ImageRecord } from "@/lib/types";
+
+const NO_TAG = "No tag";
 
 export function ImageCard({
   image,
-  onToggleFavorite,
+  onImageUpdated,
   onDelete,
   onUseAsReference,
 }: {
   image: ImageRecord;
-  onToggleFavorite: (image: ImageRecord) => void;
+  onImageUpdated: (image: ImageRecord) => void;
   onDelete: (image: ImageRecord) => void;
   onUseAsReference: (image: ImageRecord) => void;
 }) {
@@ -42,7 +51,22 @@ export function ImageCard({
     });
     if (res.ok) {
       const data = await res.json();
-      onToggleFavorite(data.image);
+      onImageUpdated(data.image);
+    }
+  }
+
+  async function handleTagChange(next: string) {
+    const nextTag = next === NO_TAG ? null : next;
+    const res = await fetch(`/api/images/${image.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tag: nextTag }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      onImageUpdated(data.image);
+    } else {
+      toast.error("Failed to update tag");
     }
   }
 
@@ -60,9 +84,16 @@ export function ImageCard({
       </div>
 
       <div className="absolute inset-x-0 top-0 p-1.5 flex justify-between opacity-0 group-hover:opacity-100 transition-opacity">
-        <Badge variant="secondary" className="text-[10px] font-mono">
-          {image.sourceType}
-        </Badge>
+        <div className="flex gap-1">
+          <Badge variant="secondary" className="text-[10px] font-mono">
+            {image.sourceType}
+          </Badge>
+          {image.tag && (
+            <Badge variant="outline" className="text-[10px] bg-background/80 max-w-32 truncate">
+              {image.tag}
+            </Badge>
+          )}
+        </div>
         <div className="flex gap-1">
           <Tooltip>
             <TooltipTrigger
@@ -90,6 +121,21 @@ export function ImageCard({
             />
             <TooltipContent>Use as reference</TooltipContent>
           </Tooltip>
+          <Select value={image.tag ?? NO_TAG} onValueChange={(v) => v && handleTagChange(v)}>
+            <SelectTrigger
+              size="sm"
+              className="h-7 w-7 justify-center border-none bg-secondary p-0 [&>svg]:hidden"
+              title="Set tag"
+            >
+              <TagIcon className="size-3.5" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={NO_TAG}>No tag</SelectItem>
+              {ASSIGNABLE_TAGS.map((t) => (
+                <SelectItem key={t} value={t}>{t}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Tooltip>
             <TooltipTrigger
               render={
