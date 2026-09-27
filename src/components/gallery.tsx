@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ImageCard } from "@/components/image-card";
+import { ImageLightbox } from "@/components/image-lightbox";
 import { ALL_TAGS_FILTER, TAG_FILTER_OPTIONS } from "@/lib/tags";
 import type { GalleryViewMode } from "@/lib/use-gallery-view";
 import { distributeIntoColumns, estimateAspectRatio } from "@/lib/masonry";
@@ -58,6 +59,7 @@ export function Gallery({
   const batchPendingCount = pendingBatchJobs.reduce((sum, job) => sum + job.requestCount, 0);
   const [searchOpen, setSearchOpen] = useState(false);
   const showSearchInput = searchOpen || query.length > 0;
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
   const filtered = useMemo(() => {
     return images.filter((img) => {
@@ -136,6 +138,7 @@ export function Gallery({
         onDelete={onDelete}
         onImageUpdated={onImageUpdated}
         onUseAsReference={onUseAsReference}
+        onOpen={() => setLightboxIndex(filtered.findIndex((img) => img.id === item.image.id))}
         masonry={view === "masonry"}
       />
     );
@@ -223,6 +226,18 @@ export function Gallery({
             {renderItems.map(renderCard)}
           </div>
         </div>
+      )}
+
+      {lightboxIndex !== null && filtered[lightboxIndex] && (
+        <ImageLightbox
+          images={filtered}
+          index={lightboxIndex}
+          onIndexChange={setLightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+          onDelete={onDelete}
+          onImageUpdated={onImageUpdated}
+          onUseAsReference={onUseAsReference}
+        />
       )}
     </div>
   );

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { toFile } from "openai";
-import { getOpenAI, MODELS } from "@/lib/openai";
+import { getOpenAI, MODEL } from "@/lib/openai";
 import { getDb } from "@/db";
 import { batchJobs } from "@/db/schema";
 import { buildBatchJsonl, type BatchRequestMeta } from "@/lib/batch";
@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
     quality = "medium",
     format = "png",
     background = "auto",
-    model = MODELS.generate,
+    model = MODEL[0],
     n = 1,
     tag = null,
   } = body ?? {};

@@ -23,12 +23,14 @@ export function ImageCard({
   onImageUpdated,
   onDelete,
   onUseAsReference,
+  onOpen,
   masonry = false,
 }: {
   image: ImageRecord;
   onImageUpdated: (image: ImageRecord) => void;
   onDelete: (image: ImageRecord) => void;
   onUseAsReference: (image: ImageRecord) => void;
+  onOpen?: () => void;
   masonry?: boolean;
 }) {
   const [deleting, setDeleting] = useState(false);
@@ -78,9 +80,14 @@ export function ImageCard({
         // Masonry needs the image's natural aspect ratio; next/image's `fill` mode requires
         // a fixed-ratio box, which we don't have since we don't store the source width/height.
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={image.blobUrl} alt={image.prompt} className="block w-full h-auto" />
+        <img
+          src={image.blobUrl}
+          alt={image.prompt}
+          className="block w-full h-auto cursor-pointer"
+          onClick={onOpen}
+        />
       ) : (
-        <div className="relative aspect-square w-full">
+        <div className="relative aspect-square w-full cursor-pointer" onClick={onOpen}>
           <Image
             src={image.blobUrl}
             alt={image.prompt}

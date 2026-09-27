@@ -9,9 +9,9 @@ export function getOpenAI() {
   return _client;
 }
 
-export const MODEL_OPTIONS = ["gpt-image-2.5-sunburst", "gpt-image-2.5-flare"] as const;
+export const MODEL = ["gpt-image-2.5-sunburst", "gpt-image-2.5-flare"] as const;
 
-export type ImageModel = (typeof MODEL_OPTIONS)[number];
+export type ImageModel = (typeof MODEL)[number];
 
 export const QUALITY_OPTIONS = ["auto", "low", "medium", "high", "xhigh", "max"] as const;
 

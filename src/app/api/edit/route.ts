@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import type OpenAI from "openai";
-import { getOpenAI, MODEL_OPTIONS } from "@/lib/openai";
+import { getOpenAI, MODEL } from "@/lib/openai";
 import { persistGeneratedImage } from "@/lib/save-image";
 
 export const maxDuration = 300;
@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
   const quality = (form.get("quality") as string) || "medium";
   const format = (form.get("format") as string) || "png";
   const background = (form.get("background") as string) || "auto";
-  const model = (form.get("model") as string) || MODEL_OPTIONS[0];
+  const model = (form.get("model") as string) || MODEL[0];
   const referenceImageIds = JSON.parse((form.get("referenceImageIds") as string) || "[]");
   const tag = (form.get("tag") as string) || null;
 

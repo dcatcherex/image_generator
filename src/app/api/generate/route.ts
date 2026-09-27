@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { getOpenAI, MODELS } from "@/lib/openai";
+import { getOpenAI, MODEL } from "@/lib/openai";
 import { persistGeneratedImage } from "@/lib/save-image";
 import { sseStreamFromEvents } from "@/lib/sse";
 
@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
     quality = "medium",
     format = "png",
     background = "auto",
-    model = MODELS.generate,
+    model = MODEL[0],
     n = 1,
     tag = null,
   } = body ?? {};

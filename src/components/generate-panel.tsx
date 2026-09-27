@@ -20,7 +20,7 @@ import {
 import { MaskEditor } from "@/components/mask-editor";
 import {
   ASPECT_RATIOS,
-  MODEL_OPTIONS,
+  MODEL,
   N_OPTIONS,
   QUALITY_OPTIONS,
   sizeFromAspectRatio,
@@ -74,7 +74,7 @@ export function GeneratePanel({
   const [quality, setQuality] = useState<string>("medium");
   const [format, setFormat] = useState<string>("webp");
   const [background, setBackground] = useState<string>("auto");
-  const [model, setModel] = useState<string>(MODEL_OPTIONS[0]);
+  const [model, setModel] = useState<string>("gpt-image-2.5-sunburst");
   const [n, setN] = useState<number>(1);
   const [tag, setTag] = useState<string>(NO_TAG);
   const [economyMode, setEconomyMode] = useState(false);
@@ -396,7 +396,7 @@ export function GeneratePanel({
           <Select value={model} onValueChange={(v) => v && setModel(v)}>
             <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
             <SelectContent>
-              {MODEL_OPTIONS.map((m) => (
+              {MODEL.map((m) => (
                 <SelectItem key={m} value={m}>{m}</SelectItem>
               ))}
             </SelectContent>
