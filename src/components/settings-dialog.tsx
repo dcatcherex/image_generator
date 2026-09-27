@@ -1,15 +1,21 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Monitor, Moon, Settings as SettingsIcon, Sun } from "lucide-react";
+import { Columns3, LayoutGrid, Monitor, Moon, Settings as SettingsIcon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
+import { Slider } from "@/components/ui/slider";
 import {
   Dialog,
   DialogContent,
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  GALLERY_COLUMNS_MAX,
+  GALLERY_COLUMNS_MIN,
+  type GalleryViewMode,
+} from "@/lib/use-gallery-view";
 import { cn } from "cn";
 
 const THEME_OPTIONS = [
@@ -18,9 +24,24 @@ const THEME_OPTIONS = [
   { value: "dark", label: "Dark", icon: Moon },
 ] as const;
 
+const VIEW_OPTIONS = [
+  { value: "grid", label: "Grid", icon: LayoutGrid },
+  { value: "masonry", label: "Masonry", icon: Columns3 },
+] as const;
+
 const NAV_ITEMS = [{ id: "general", label: "General", icon: SettingsIcon }] as const;
 
-export function SettingsDialog() {
+export function SettingsDialog({
+  view,
+  setView,
+  columns,
+  setColumns,
+}: {
+  view: GalleryViewMode;
+  setView: (v: GalleryViewMode) => void;
+  columns: number;
+  setColumns: (n: number) => void;
+}) {
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
   // eslint-disable-next-line react-hooks/set-state-in-effect -- mount guard to avoid hydration mismatch
@@ -80,6 +101,45 @@ export function SettingsDialog() {
                 ))}
               </div>
             </div>
+
+            <div className="my-5 border-t" />
+
+            <h3 className="mb-4 text-sm font-semibold">Gallery</h3>
+            <div className="flex items-center justify-between gap-4">
+              <span className="text-sm">Layout</span>
+              <div className="inline-flex rounded-lg border p-0.5">
+                {VIEW_OPTIONS.map((option) => (
+                  <Button
+                    key={option.value}
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={option.label}
+                    aria-pressed={view === option.value}
+                    className={cn(
+                      "rounded-md text-muted-foreground",
+                      view === option.value && "bg-foreground/10 text-foreground shadow-sm"
+                    )}
+                    onClick={() => setView(option.value)}
+                  >
+                    <option.icon className="size-4" />
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-4 flex items-center justify-between gap-4">
+              <span className="text-sm">Columns</span>
+              <span className="text-xs text-muted-foreground">{columns}</span>
+            </div>
+            <Slider
+              className="mt-2"
+              min={GALLERY_COLUMNS_MIN}
+              max={GALLERY_COLUMNS_MAX}
+              step={1}
+              value={[columns]}
+              onValueChange={(v) => setColumns(Array.isArray(v) ? v[0] : v)}
+            />
           </div>
         </div>
       </DialogContent>

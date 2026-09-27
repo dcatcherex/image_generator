@@ -23,11 +23,13 @@ export function ImageCard({
   onImageUpdated,
   onDelete,
   onUseAsReference,
+  masonry = false,
 }: {
   image: ImageRecord;
   onImageUpdated: (image: ImageRecord) => void;
   onDelete: (image: ImageRecord) => void;
   onUseAsReference: (image: ImageRecord) => void;
+  masonry?: boolean;
 }) {
   const [deleting, setDeleting] = useState(false);
 
@@ -72,16 +74,23 @@ export function ImageCard({
 
   return (
     <div className="group relative rounded-lg overflow-hidden border bg-card">
-      <div className="relative aspect-square w-full">
-        <Image
-          src={image.blobUrl}
-          alt={image.prompt}
-          fill
-          sizes="(max-width: 768px) 50vw, 25vw"
-          className="object-cover"
-          unoptimized
-        />
-      </div>
+      {masonry ? (
+        // Masonry needs the image's natural aspect ratio; next/image's `fill` mode requires
+        // a fixed-ratio box, which we don't have since we don't store the source width/height.
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={image.blobUrl} alt={image.prompt} className="block w-full h-auto" />
+      ) : (
+        <div className="relative aspect-square w-full">
+          <Image
+            src={image.blobUrl}
+            alt={image.prompt}
+            fill
+            sizes="(max-width: 768px) 50vw, 25vw"
+            className="object-cover"
+            unoptimized
+          />
+        </div>
+      )}
 
       <div className="absolute inset-x-0 top-0 p-1.5 flex justify-between opacity-0 group-hover:opacity-100 transition-opacity">
         <div className="flex gap-1">

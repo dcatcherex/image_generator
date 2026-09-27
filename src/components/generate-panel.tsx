@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState } from "react";
 import Image from "next/image";
-import { Loader2, Maximize, Paintbrush2, Sparkles, Upload, Wand2, X } from "lucide-react";
+import { Loader2, Maximize, Paintbrush2, Sparkles, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -17,7 +17,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MaskEditor } from "@/components/mask-editor";
 import {
   ASPECT_RATIOS,
@@ -70,7 +69,6 @@ export function GeneratePanel({
   isEditing: boolean;
   setIsEditing: (v: boolean) => void;
 }) {
-  const [mode, setMode] = useState<"generate" | "edit">("generate");
   const [prompt, setPrompt] = useState("");
   const [aspectRatio, setAspectRatio] = useState<string>("auto");
   const [quality, setQuality] = useState<string>("medium");
@@ -88,21 +86,20 @@ export function GeneratePanel({
 
   const { generate, isGenerating, error } = generateStream;
 
+  const isEditMode = referenceItems.length > 0;
+
   const size = useMemo(() => {
     const selected = ASPECT_RATIOS.find((ar) => ar.label === aspectRatio);
     return selected?.ratio ? sizeFromAspectRatio(selected.ratio[0], selected.ratio[1]) : "auto";
   }, [aspectRatio]);
 
   const cost = useMemo(() => {
-    const base = estimateCost(quality, size) * (mode === "generate" ? n : 1);
-    return mode === "generate" && economyMode ? base * ECONOMY_DISCOUNT : base;
-  }, [quality, size, mode, n, economyMode]);
+    const base = estimateCost(quality, size) * (isEditMode ? 1 : n);
+    return !isEditMode && economyMode ? base * ECONOMY_DISCOUNT : base;
+  }, [quality, size, isEditMode, n, economyMode]);
   const maskableItem = referenceItems.length === 1 ? referenceItems[0] : null;
   const activeMask = maskableItem && maskableItem.key === maskOwnerKey ? maskFile : null;
 
-  function handleModeChange(nextMode: "generate" | "edit") {
-    setMode(nextMode);
-  }
   const busy = isGenerating || isEditing || isSubmittingBatch;
 
   async function handleSubmit() {
@@ -113,7 +110,7 @@ export function GeneratePanel({
 
     const tagValue = tag === NO_TAG ? null : tag;
 
-    if (mode === "generate" && economyMode) {
+    if (!isEditMode && economyMode) {
       setIsSubmittingBatch(true);
       try {
         const res = await fetch("/api/batch/generate", {
@@ -135,7 +132,7 @@ export function GeneratePanel({
       return;
     }
 
-    if (mode === "generate") {
+    if (!isEditMode) {
       let created = 0;
       await generate(
         { prompt, size, quality, format, background, model, n, tag: tagValue },
@@ -149,11 +146,6 @@ export function GeneratePanel({
       } else if (created > 0) {
         toast.success(created > 1 ? `${created} images generated` : "Image generated");
       }
-      return;
-    }
-
-    if (referenceItems.length === 0) {
-      toast.error("Add at least one reference image");
       return;
     }
 
@@ -194,99 +186,93 @@ export function GeneratePanel({
 
   return (
     <div className="flex flex-col h-full min-h-0 border-b lg:border-b-0 lg:border-l bg-background">
-      <div className="shrink-0 p-4 pb-0">
-        <Tabs value={mode} onValueChange={(v) => handleModeChange(v as "generate" | "edit")}>
-          <TabsList className="w-full">
-            <TabsTrigger value="generate" className="flex-1 gap-1.5">
-              <Sparkles className="size-3.5" /> Generate
-            </TabsTrigger>
-            <TabsTrigger value="edit" className="flex-1 gap-1.5">
-              <Wand2 className="size-3.5" /> Edit / Reference
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
-      </div>
-
       <div className="flex flex-1 min-h-0 flex-col gap-4 p-4">
         <div className="flex flex-1 min-h-24 flex-col gap-1.5">
-          <Label htmlFor="prompt">Prompt</Label>
+          <div className="flex items-center justify-between">
+            <Label htmlFor="prompt">Prompt</Label>
+            {isEditMode && (
+              <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                <Paintbrush2 className="size-3" /> Editing {referenceItems.length} image
+                {referenceItems.length > 1 ? "s" : ""}
+              </span>
+            )}
+          </div>
           <Textarea
             id="prompt"
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
             placeholder={
-              mode === "generate"
-                ? "A children's book illustration of a fox reading under a lantern..."
-                : "Describe how to change the reference image(s)..."
+              isEditMode
+                ? "Describe how to change the reference image(s)..."
+                : "A children's book illustration of a fox reading under a lantern..."
             }
             className="field-sizing-fixed h-full flex-1 resize-none overflow-y-auto"
           />
         </div>
 
-        {mode === "edit" && (
-          <div className="shrink-0 flex flex-col gap-2">
-            <Label>Reference images</Label>
-            <div className="flex flex-wrap gap-2">
-              {referenceItems.map((item) => (
-                <div key={item.key} className="relative size-16 rounded-md overflow-hidden border">
-                  <Image src={item.previewUrl} alt="reference" fill className="object-cover" unoptimized />
-                  <button
-                    onClick={() => setReferenceItems(referenceItems.filter((r) => r.key !== item.key))}
-                    className="absolute top-0.5 right-0.5 bg-background/80 rounded-full p-0.5"
-                  >
-                    <X className="size-3" />
-                  </button>
-                </div>
-              ))}
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className="size-16 rounded-md border border-dashed flex items-center justify-center text-muted-foreground hover:bg-muted/50"
-              >
-                <Upload className="size-4" />
-              </button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                multiple
-                className="hidden"
-                onChange={(e) => addFiles(e.target.files)}
-              />
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Upload from disk, or click &ldquo;Use as reference&rdquo; on any gallery image.
-            </p>
+        <div className="shrink-0 flex flex-col gap-2">
+          <Label>Reference images</Label>
+          <div className="flex flex-wrap gap-2">
+            {referenceItems.map((item) => (
+              <div key={item.key} className="relative size-16 rounded-md overflow-hidden border">
+                <Image src={item.previewUrl} alt="reference" fill className="object-cover" unoptimized />
+                <button
+                  onClick={() => setReferenceItems(referenceItems.filter((r) => r.key !== item.key))}
+                  className="absolute top-0.5 right-0.5 bg-background/80 rounded-full p-0.5"
+                >
+                  <X className="size-3" />
+                </button>
+              </div>
+            ))}
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="size-16 rounded-md border border-dashed flex items-center justify-center text-muted-foreground hover:bg-muted/50"
+            >
+              <Upload className="size-4" />
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              className="hidden"
+              onChange={(e) => addFiles(e.target.files)}
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Upload from disk, or click &ldquo;Use as reference&rdquo; on any gallery image — adding one
+            switches to editing automatically.
+          </p>
 
-            {maskableItem && (
-              <div className="flex items-center gap-2 rounded-md border px-3 py-2">
-                <Paintbrush2 className="size-3.5 text-muted-foreground shrink-0" />
-                <span className="flex-1 text-xs text-muted-foreground">
-                  {activeMask ? "Mask applied — only painted areas will change" : "No mask — the whole image may change"}
-                </span>
+          {maskableItem && (
+            <div className="flex items-center gap-2 rounded-md border px-3 py-2">
+              <Paintbrush2 className="size-3.5 text-muted-foreground shrink-0" />
+              <span className="flex-1 text-xs text-muted-foreground">
+                {activeMask ? "Mask applied — only painted areas will change" : "No mask — the whole image may change"}
+              </span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => setMaskEditorOpen(true)}
+              >
+                {activeMask ? "Edit mask" : "Draw mask"}
+              </Button>
+              {activeMask && (
                 <Button
                   type="button"
-                  variant="outline"
+                  variant="ghost"
                   size="sm"
                   className="h-7 text-xs"
-                  onClick={() => setMaskEditorOpen(true)}
+                  onClick={() => setMaskFile(null)}
                 >
-                  {activeMask ? "Edit mask" : "Draw mask"}
+                  Clear
                 </Button>
-                {activeMask && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 text-xs"
-                    onClick={() => setMaskFile(null)}
-                  >
-                    Clear
-                  </Button>
-                )}
-              </div>
-            )}
-          </div>
-        )}
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       {maskableItem && (
@@ -303,7 +289,7 @@ export function GeneratePanel({
       )}
 
       <div className="shrink-0 flex flex-col gap-4 p-4 pt-3 border-t">
-        {mode === "generate" && (
+        {!isEditMode && (
           <Tooltip>
             <TooltipTrigger
               render={
@@ -328,7 +314,7 @@ export function GeneratePanel({
         )}
 
         <div className="grid grid-cols-2 gap-3">
-          {mode === "generate" && (
+          {!isEditMode && (
             <div className="flex flex-col gap-1.5">
               <Label>Batch (n)</Label>
               <Select value={String(n)} onValueChange={(v) => v && setN(Number(v))}>
@@ -420,7 +406,7 @@ export function GeneratePanel({
         <Button onClick={handleSubmit} disabled={busy} className="w-full gap-2 justify-between">
           <span className="flex items-center gap-2">
             {busy ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
-            {mode === "generate" ? (economyMode ? "Submit batch" : "Generate") : "Apply edit"}
+            {isEditMode ? "Apply edit" : economyMode ? "Submit batch" : "Generate"}
           </span>
           <Badge
             variant="outline"

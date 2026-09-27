@@ -8,6 +8,7 @@ import { Gallery } from "@/components/gallery";
 import { SettingsDialog } from "@/components/settings-dialog";
 import { referenceItemFromImage, type ReferenceItem } from "@/lib/reference-items";
 import { useImageStream } from "@/lib/use-image-stream";
+import { useGalleryView } from "@/lib/use-gallery-view";
 import { ALL_TAGS_FILTER } from "@/lib/tags";
 import type { BatchJobRecord, ImageRecord } from "@/lib/types";
 
@@ -26,6 +27,7 @@ export default function Home() {
   const [pendingBatchJobs, setPendingBatchJobs] = useState<BatchJobRecord[]>([]);
   const [isEditing, setIsEditing] = useState(false);
   const generateStream = useImageStream();
+  const galleryView = useGalleryView();
 
   useEffect(() => {
     fetch("/api/images")
@@ -91,7 +93,12 @@ export default function Home() {
           Image Studio
         </h1>
         <div className="flex items-center gap-3">
-          <SettingsDialog />
+          <SettingsDialog
+            view={galleryView.view}
+            setView={galleryView.setView}
+            columns={galleryView.columns}
+            setColumns={galleryView.setColumns}
+          />
           <UserButton />
         </div>
       </header>
@@ -129,6 +136,8 @@ export default function Home() {
             partialPreview={generateStream.partialB64}
             pendingCount={generateStream.pendingCount}
             pendingBatchJobs={pendingBatchJobs}
+            view={galleryView.view}
+            columns={galleryView.columns}
           />
         )}
       </div>
