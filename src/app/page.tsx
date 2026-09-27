@@ -87,33 +87,35 @@ export default function Home() {
 
   return (
     <div className="flex flex-col h-screen">
-      <header className="flex items-center justify-between px-4 h-14 border-b shrink-0 bg-background">
-        <h1 className="flex items-center gap-2">
-          <ImageIcon className="size-4" />
-          Image Studio
-        </h1>
-        <div className="flex items-center gap-3">
-          <SettingsDialog
-            view={galleryView.view}
-            setView={galleryView.setView}
-            columns={galleryView.columns}
-            setColumns={galleryView.setColumns}
-          />
-          <UserButton />
-        </div>
-      </header>
-
       <div className="flex flex-col-reverse lg:flex-row-reverse flex-1 min-h-0">
-        <div className="lg:w-[340px] shrink-0 flex flex-col max-h-[45vh] lg:max-h-none lg:h-full min-h-0 overflow-y-auto">
-          <GeneratePanel
-            onImageCreated={handleImageCreated}
-            onBatchSubmitted={handleBatchSubmitted}
-            referenceItems={referenceItems}
-            setReferenceItems={setReferenceItems}
-            generateStream={generateStream}
-            isEditing={isEditing}
-            setIsEditing={setIsEditing}
-          />
+        <div className="lg:w-[340px] shrink-0 flex flex-col max-h-[45vh] lg:max-h-none lg:h-full min-h-0 border-b lg:border-b-0 lg:border-l bg-background">
+          <div className="flex items-center justify-between px-4 h-14 border-b shrink-0">
+            <h1 className="flex items-center gap-2">
+              <ImageIcon className="size-4" />
+              Image Studio
+            </h1>
+            <div className="flex items-center gap-3">
+              <SettingsDialog
+                view={galleryView.view}
+                setView={galleryView.setView}
+                columns={galleryView.columns}
+                setColumns={galleryView.setColumns}
+              />
+              <UserButton />
+            </div>
+          </div>
+
+          <div className="flex-1 min-h-0 overflow-y-auto flex flex-col">
+            <GeneratePanel
+              onImageCreated={handleImageCreated}
+              onBatchSubmitted={handleBatchSubmitted}
+              referenceItems={referenceItems}
+              setReferenceItems={setReferenceItems}
+              generateStream={generateStream}
+              isEditing={isEditing}
+              setIsEditing={setIsEditing}
+            />
+          </div>
         </div>
 
         {loading ? (

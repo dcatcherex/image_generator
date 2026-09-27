@@ -185,7 +185,7 @@ export function GeneratePanel({
   }
 
   return (
-    <div className="flex flex-col h-full min-h-0 border-b lg:border-b-0 lg:border-l bg-background">
+    <div className="flex flex-col h-full min-h-0">
       <div className="flex flex-1 min-h-0 flex-col gap-4 p-4">
         <div className="flex flex-1 min-h-24 flex-col gap-1.5">
           <div className="flex items-center justify-between">
