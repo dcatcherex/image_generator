@@ -118,40 +118,83 @@ export function ImageLightbox({
   return (
     <div className="fixed inset-0 z-50 flex bg-background/95 backdrop-blur-sm" onWheel={handleWheel}>
       <div className="relative flex flex-1 items-center justify-center p-4 lg:p-8">
-        <button
-          onClick={onClose}
-          aria-label="Close"
-          className="absolute top-3 right-3 z-10 rounded-full bg-secondary/80 p-2 hover:bg-secondary"
-        >
-          <X className="size-4" />
-        </button>
+        <div className="absolute top-3 right-3 z-10 flex items-center gap-2">
+          <Select value={image.tag ?? NO_TAG} onValueChange={(v) => v && handleTagChange(v)}>
+            <SelectTrigger
+              size="sm"
+              className="h-8 w-8 justify-center rounded-full border-none bg-secondary/80 p-0 hover:bg-secondary [&>svg]:hidden hover:cursor-pointer"
+              title="Set tag"
+            >
+              <span className="flex items-center justify-center">
+                <TagIcon className="size-4" />
+              </span>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={NO_TAG}>No tag</SelectItem>
+              {ASSIGNABLE_TAGS.map((t) => (
+                <SelectItem key={t} value={t}>{t}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button
+            size="icon"
+            variant="secondary"
+            onClick={handleFavorite}
+            aria-label="Favorite"
+            className="rounded-full bg-secondary/80 hover:bg-secondary"
+          >
+            <Heart className={image.favorite ? "size-4 fill-red-500 text-red-500" : "size-4"} />
+          </Button>
+          <Button
+            size="icon"
+            variant="secondary"
+            aria-label="Download"
+            className="rounded-full bg-secondary/80 hover:bg-secondary"
+            nativeButton={false}
+            render={<a href={image.blobUrl} download target="_blank" rel="noreferrer" />}
+          >
+            <Download className="size-4" />
+          </Button>
+          <Button
+            size="icon"
+            variant="secondary"
+            onClick={onClose}
+            aria-label="Close"
+            className="rounded-full bg-secondary/80 hover:bg-secondary"
+          >
+            <X className="size-4" />
+          </Button>
+        </div>
         {index > 0 && (
-          <button
+          <Button
+            size="icon"
+            variant="secondary"
             onClick={() => onIndexChange(index - 1)}
             aria-label="Previous image"
-            className="absolute left-2 top-1/2 z-10 -translate-y-1/2 rounded-full bg-secondary/80 p-2 hover:bg-secondary"
+            className="absolute left-2 top-1/2 z-10 -translate-y-1/2 rounded-full bg-secondary/80 hover:bg-secondary"
           >
             <ChevronLeft className="size-4" />
-          </button>
+          </Button>
         )}
-        <div className="relative h-full w-full ">
-          <Image
-            src={image.blobUrl}
-            alt={image.prompt}
-            fill
-            sizes="80vw"
-            className="object-contain"
-            unoptimized
-          />
-        </div>
+        <Image
+          src={image.blobUrl}
+          alt={image.prompt}
+          width={1000}
+          height={1000}
+          sizes="80vw"
+          className="h-auto max-h-full w-auto max-w-full rounded-2xl object-contain"
+          unoptimized
+        />
         {index < images.length - 1 && (
-          <button
+          <Button
+            size="icon"
+            variant="secondary"
             onClick={() => onIndexChange(index + 1)}
             aria-label="Next image"
-            className="absolute right-2 top-1/2 z-10 -translate-y-1/2 rounded-full bg-secondary/80 p-2 hover:bg-secondary"
+            className="absolute right-2 top-1/2 z-10 -translate-y-1/2 rounded-full bg-secondary/80 hover:bg-secondary"
           >
             <ChevronRight className="size-4" />
-          </button>
+          </Button>
         )}
       </div>
 
@@ -178,32 +221,9 @@ export function ImageLightbox({
         </div>
 
         <div className="flex gap-1.5">
-          <Button size="icon" variant="secondary" className="size-8" onClick={handleFavorite}>
-            <Heart className={image.favorite ? "size-4 fill-red-500 text-red-500" : "size-4"} />
-          </Button>
           <Button size="icon" variant="secondary" className="size-8" onClick={() => onUseAsReference(image)}>
             <Layers className="size-4" />
           </Button>
-          <Select value={image.tag ?? NO_TAG} onValueChange={(v) => v && handleTagChange(v)}>
-            <SelectTrigger
-              size="sm"
-              className="h-8 w-8 justify-center border-none bg-secondary p-0 [&>svg]:hidden"
-              title="Set tag"
-            >
-              <TagIcon className="size-4" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={NO_TAG}>No tag</SelectItem>
-              {ASSIGNABLE_TAGS.map((t) => (
-                <SelectItem key={t} value={t}>{t}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <a href={image.blobUrl} download target="_blank" rel="noreferrer">
-            <Button size="icon" variant="secondary" className="size-8">
-              <Download className="size-4" />
-            </Button>
-          </a>
           <Button
             size="icon"
             variant="secondary"
