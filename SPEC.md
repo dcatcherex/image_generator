@@ -125,7 +125,7 @@ src/
   db/
     schema.ts, index.ts         Drizzle schema (images, batch_jobs) + lazy DB client
   proxy.ts                      Clerk middleware — gates all routes except /sign-in, /sign-up, /api/batch/cron
-vercel.json                     Vercel Cron config (hits /api/batch/cron every 15 min)
+vercel.json                     Vercel Cron config (hits /api/batch/cron daily at 00:00 UTC)
 ```
 
 ## 5. Core Flows
@@ -159,7 +159,7 @@ vercel.json                     Vercel Cron config (hits /api/batch/cron every 1
 1. User flips the "Economy mode" switch in `generate-panel.tsx` (Generate tab only), which shows a `~50% cheaper` badge and swaps the cost estimate to `estimateCost() × 0.5`.
 2. Submitting posts JSON to `POST /api/batch/generate`: server builds a `.jsonl` (one line per requested image, `custom_id` = a fresh UUID, targeting `/v1/images/generations`), uploads it via `openai.files.create({ purpose: "batch" })`, creates the batch via `openai.batches.create({ input_file_id, endpoint: "/v1/images/generations", completion_window: "24h" })`, and inserts a `batch_jobs` row. No streaming, no live preview — the response is just a submission confirmation.
 3. `page.tsx` fetches `GET /api/batch` on mount and renders one dashed-border "Pending — up to 24h" placeholder tile per still-expected image (`sum of requestCount` across non-terminal jobs) — these placeholders are DB-backed, not client-memory-only, so they **survive a page reload** (a batch can take hours).
-4. While anything is pending, the client polls `POST /api/batch/poll` every 45s (responsiveness while a tab is open); a **Vercel Cron** hitting `GET /api/batch/cron` every 15 min is the reliability backstop that keeps working even when nobody has the app open.
+4. While anything is pending, the client polls `POST /api/batch/poll` every 45s (responsiveness while a tab is open); a **Vercel Cron** hitting `GET /api/batch/cron` once a day (00:00 UTC) is the reliability backstop that keeps working even when nobody has the app open.
 5. Both poll routes call the same `checkAndIngestPendingBatches()` (`src/lib/batch-poll.ts`): retrieves the batch from OpenAI, updates status/counts, and — the first time it sees `status: "completed"` — fetches the output file, parses each line (correlating by `custom_id`, **not** line order, per OpenAI's own docs warning that output order isn't guaranteed), looks up the original request params, and calls the same `persistGeneratedImage()` the instant flow uses. The row then flips to our own `"ingested"` status so it's never re-processed. Once ingested, the resulting images just show up in the normal `/api/images` list and the placeholder tiles for that job naturally disappear (the job drops out of the non-terminal `GET /api/batch` list).
 
 ## 6. Cost Estimation
@@ -176,7 +176,7 @@ vercel.json                     Vercel Cron config (hits /api/batch/cron every 1
 
 - Vercel project `image-generator` (team `dcatcherexgmailcoms-projects`), Git-connected to `github.com/dcatcherex/image_generator`. Pushes to `master` auto-deploy to Production.
 - Env vars (Production/Preview/Development, set via `vercel env add`): `DATABASE_URL`(+`_UNPOOLED`), `BLOB_READ_WRITE_TOKEN`, `OPENAI_API_KEY`, `CLERK_SECRET_KEY`, `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, plus Clerk's sign-in/up redirect URL vars. **`CRON_SECRET` still needs to be added manually** (see §7, PLAN.md §10) — Economy mode's cron backstop won't authenticate without it.
-- `vercel.json` configures a Vercel Cron job hitting `/api/batch/cron` every 15 minutes. **Check the Vercel plan tier** — Hobby plan silently limits cron jobs to once/day; Pro+ allows the configured cadence.
+- `vercel.json` configures a Vercel Cron job hitting `/api/batch/cron` once a day (00:00 UTC). The Hobby plan only allows daily crons and **rejects deployments** with a more frequent schedule; on Pro+ this can go back to `*/15 * * * *`.
 - Local dev: `pnpm dev` (Turbopack — works fine under pnpm's strict `node_modules`; explicitly broke under npm's flat layout, hence the pnpm migration).
 - `drizzle-kit push` against `DATABASE_URL_UNPOOLED` (direct connection; pooled connection doesn't support the session-level operations migrations need). Run via `pnpm exec dotenv -e .env.local -- pnpm exec drizzle-kit push` since the CLI doesn't auto-load `.env.local`.
 
