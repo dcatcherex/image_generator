@@ -354,12 +354,14 @@ export function GeneratePanel({
                   {queue.map((item) => (
                     <div key={item.id} className="flex items-start gap-2 rounded-md bg-muted/50 p-1.5 text-xs">
                       <span className="flex-1 line-clamp-2 text-foreground/90">{item.prompt}</span>
-                      <button
+                      <Button
+                        size="icon-xs"
+                        variant="ghost"
                         onClick={() => removeQueueItem(item.id)}
                         className="shrink-0 text-muted-foreground hover:text-foreground"
                       >
                         <X className="size-3.5" />
-                      </button>
+                      </Button>
                     </div>
                   ))}
                 </div>

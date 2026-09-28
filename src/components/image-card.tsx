@@ -140,10 +140,12 @@ export function ImageCard({
           <Select value={image.tag ?? NO_TAG} onValueChange={(v) => v && handleTagChange(v)}>
             <SelectTrigger
               size="sm"
-              className="h-7 w-7 justify-center border-none bg-secondary p-0 [&>svg]:hidden"
+              className="h-7 w-7 justify-center border-none bg-secondary p-0 hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)] [&>svg]:hidden"
               title="Set tag"
             >
-              <TagIcon className="size-3.5" />
+              <span className="flex items-center justify-center">
+                <TagIcon className="size-3.5" />
+              </span>
             </SelectTrigger>
             <SelectContent>
               <SelectItem value={NO_TAG}>No tag</SelectItem>

@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import Image from "next/image";
 import { Upload, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { referenceItemFromFile, type ReferenceItem } from "@/lib/reference-items";
 import { cn } from "cn";
@@ -56,20 +57,23 @@ export function ReferenceImagesPicker({
         {items.map((item) => (
           <div key={item.key} className="relative size-16 rounded-md overflow-hidden border">
             <Image src={item.previewUrl} alt="reference" fill className="object-cover" unoptimized />
-            <button
+            <Button
+              size="icon-xs"
+              variant="secondary"
               onClick={() => removeItem(item.key)}
-              className="absolute top-0.5 right-0.5 bg-background/80 rounded-full p-0.5"
+              className="absolute top-0.5 right-0.5 rounded-full bg-background/80 hover:bg-background"
             >
               <X className="size-3" />
-            </button>
+            </Button>
           </div>
         ))}
-        <button
+        <Button
+          variant="ghost"
           onClick={() => fileInputRef.current?.click()}
-          className="size-16 rounded-md border border-dashed flex items-center justify-center text-muted-foreground hover:bg-muted/50"
+          className="size-16 rounded-md border border-dashed text-muted-foreground hover:bg-muted/50"
         >
           <Upload className="size-4" />
-        </button>
+        </Button>
         <input
           ref={fileInputRef}
           type="file"
