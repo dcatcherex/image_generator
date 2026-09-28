@@ -264,7 +264,7 @@ export function ImageLightbox({
               i === index ? "ring-2 ring-primary" : "opacity-70 hover:opacity-100"
             }`}
           >
-            <Image src={img.blobUrl} alt={img.prompt} fill className="object-cover" unoptimized />
+            <Image src={img.blobUrl} alt={img.prompt} fill sizes="64px" className="object-cover" />
           </button>
         ))}
       </div>

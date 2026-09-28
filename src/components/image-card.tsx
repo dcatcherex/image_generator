@@ -18,6 +18,13 @@ import type { ImageRecord } from "@/lib/types";
 
 const NO_TAG = "No tag";
 
+// `size` is stored as "WIDTHxHEIGHT" (or "auto" when the model picked), which is enough
+// for next/image to reserve the right aspect ratio in masonry without storing dimensions.
+function parseSize(size: string): { width: number; height: number } | null {
+  const match = /^(\d+)x(\d+)$/.exec(size);
+  return match ? { width: Number(match[1]), height: Number(match[2]) } : null;
+}
+
 export function ImageCard({
   image,
   onImageUpdated,
@@ -77,12 +84,15 @@ export function ImageCard({
   return (
     <div className="group relative rounded-lg overflow-hidden border bg-card">
       {masonry ? (
-        // Masonry needs the image's natural aspect ratio; next/image's `fill` mode requires
-        // a fixed-ratio box, which we don't have since we don't store the source width/height.
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
+        // Masonry needs the image's natural aspect ratio, taken from the stored size. For
+        // "auto" sizes the ratio is unknown, so fall back to 1:1 intrinsic dimensions —
+        // `h-auto` still lets the browser correct the height once the image loads.
+        <Image
           src={image.blobUrl}
           alt={image.prompt}
+          width={parseSize(image.size)?.width ?? 1024}
+          height={parseSize(image.size)?.height ?? 1024}
+          sizes="(max-width: 768px) 50vw, 25vw"
           className="block w-full h-auto cursor-pointer"
           onClick={onOpen}
         />
@@ -94,7 +104,6 @@ export function ImageCard({
             fill
             sizes="(max-width: 768px) 50vw, 25vw"
             className="object-cover"
-            unoptimized
           />
         </div>
       )}
