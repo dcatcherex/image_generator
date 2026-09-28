@@ -117,15 +117,14 @@ export function ImageLightbox({
 
   return (
     <div className="fixed inset-0 z-50 flex bg-background/95 backdrop-blur-sm" onWheel={handleWheel}>
-      <button
-        onClick={onClose}
-        aria-label="Close"
-        className="absolute top-3 right-3 z-10 rounded-full bg-secondary/80 p-2 hover:bg-secondary"
-      >
-        <X className="size-4" />
-      </button>
-
       <div className="relative flex flex-1 items-center justify-center p-4 lg:p-8">
+        <button
+          onClick={onClose}
+          aria-label="Close"
+          className="absolute top-3 right-3 z-10 rounded-full bg-secondary/80 p-2 hover:bg-secondary"
+        >
+          <X className="size-4" />
+        </button>
         {index > 0 && (
           <button
             onClick={() => onIndexChange(index - 1)}
@@ -135,7 +134,7 @@ export function ImageLightbox({
             <ChevronLeft className="size-4" />
           </button>
         )}
-        <div className="relative h-full w-full">
+        <div className="relative h-full w-full ">
           <Image
             src={image.blobUrl}
             alt={image.prompt}

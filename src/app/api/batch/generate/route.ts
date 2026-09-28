@@ -8,37 +8,46 @@ import { buildBatchJsonl, type BatchRequestMeta } from "@/lib/batch";
 
 export const maxDuration = 60;
 
+// One entry per queued prompt from the UI's "Prompt queue" — each can carry its own
+// settings and its own repeat count `n`, unlike a single generate/edit request.
+type QueuedRequest = {
+  prompt: unknown;
+  size?: string;
+  quality?: string;
+  format?: string;
+  background?: string;
+  model?: string;
+  n?: number;
+  tag?: string | null;
+};
+
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const {
-    prompt,
-    size = "1024x1024",
-    quality = "medium",
-    format = "png",
-    background = "auto",
-    model = MODEL[0],
-    n = 1,
-    tag = null,
-  } = body ?? {};
+  const queued: QueuedRequest[] = Array.isArray(body?.requests) ? body.requests : [];
 
-  if (!prompt || typeof prompt !== "string") {
-    return NextResponse.json({ error: "Prompt is required" }, { status: 400 });
+  const requests: BatchRequestMeta[] = [];
+  for (const item of queued) {
+    if (!item.prompt || typeof item.prompt !== "string") continue;
+    // Same conservative cap as the instant-generate n selector (see src/lib/openai.ts
+    // N_OPTIONS) — Economy mode reuses that same control in the UI, so keep them in sync.
+    const count = Math.min(Math.max(Number(item.n) || 1, 1), 4);
+    for (let i = 0; i < count; i++) {
+      requests.push({
+        customId: randomUUID(),
+        prompt: item.prompt,
+        size: item.size || "1024x1024",
+        quality: item.quality || "medium",
+        format: item.format || "png",
+        background: item.background || "auto",
+        model: item.model || MODEL[0],
+        tag: item.tag ?? null,
+      });
+    }
   }
 
-  // Same conservative cap as the instant-generate n selector (see src/lib/openai.ts
-  // N_OPTIONS) — Economy mode reuses that same control in the UI, so keep them in sync.
-  const count = Math.min(Math.max(Number(n) || 1, 1), 4);
-
-  const requests: BatchRequestMeta[] = Array.from({ length: count }, () => ({
-    customId: randomUUID(),
-    prompt,
-    size,
-    quality,
-    format,
-    background,
-    model,
-    tag,
-  }));
+  if (requests.length === 0) {
+    return NextResponse.json({ error: "At least one prompt is required" }, { status: 400 });
+  }
 
   const openai = getOpenAI();
 
@@ -66,7 +75,7 @@ export async function POST(req: NextRequest) {
         outputFileId: batch.output_file_id ?? null,
         errorFileId: batch.error_file_id ?? null,
         status: batch.status,
-        requestCount: count,
+        requestCount: requests.length,
         completedCount: batch.request_counts?.completed ?? 0,
         failedCount: batch.request_counts?.failed ?? 0,
         requests,

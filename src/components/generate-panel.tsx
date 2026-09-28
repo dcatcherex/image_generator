@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Loader2, Maximize, Paintbrush2, Sparkles } from "lucide-react";
+import { Loader2, Maximize, Paintbrush2, Plus, Sparkles, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/select";
 import { MaskEditor } from "@/components/mask-editor";
 import { ReferenceImagesPicker } from "@/components/reference-images-picker";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   ASPECT_RATIOS,
   MODEL,
@@ -38,6 +39,21 @@ const ECONOMY_DISCOUNT = 0.5;
 // "png"/"medium" etc. display verbatim elsewhere), so the "no tag" sentinel needs to be
 // human-readable itself rather than an internal token like "__none__".
 const NO_TAG = "No tag";
+
+// A queued Economy-mode prompt — each item keeps its own snapshot of settings (taken at
+// the moment it was added), so later prompts can use different sizes/quality/etc without
+// affecting ones already queued.
+type QueuedPrompt = {
+  id: string;
+  prompt: string;
+  size: string;
+  quality: string;
+  format: string;
+  background: string;
+  model: string;
+  n: number;
+  tag: string | null;
+};
 
 function AspectRatioIcon({ ratio }: { ratio: readonly [number, number] | null }) {
   if (!ratio) return <Maximize className="size-4" />;
@@ -78,6 +94,7 @@ export function GeneratePanel({
   const [n, setN] = useState<number>(1);
   const [tag, setTag] = useState<string>(NO_TAG);
   const [economyMode, setEconomyMode] = useState(false);
+  const [queue, setQueue] = useState<QueuedPrompt[]>([]);
   const [isSubmittingBatch, setIsSubmittingBatch] = useState(false);
   const [maskFile, setMaskFile] = useState<File | null>(null);
   const [maskOwnerKey, setMaskOwnerKey] = useState<string | null>(null);
@@ -92,30 +109,65 @@ export function GeneratePanel({
     return selected?.ratio ? sizeFromAspectRatio(selected.ratio[0], selected.ratio[1]) : "auto";
   }, [aspectRatio]);
 
-  const cost = useMemo(() => {
+  const draftCost = useMemo(() => {
     const base = estimateCost(quality, size) * (isEditMode ? 1 : n);
     return !isEditMode && economyMode ? base * ECONOMY_DISCOUNT : base;
   }, [quality, size, isEditMode, n, economyMode]);
+
+  // Queued items are only submitted (and thus only priced) in Economy mode, so no
+  // separate "instant" branch is needed here the way draftCost has one.
+  const queueCost = useMemo(() => {
+    if (isEditMode || !economyMode) return 0;
+    return queue.reduce((sum, item) => sum + estimateCost(item.quality, item.size) * item.n * ECONOMY_DISCOUNT, 0);
+  }, [queue, isEditMode, economyMode]);
+
+  const cost = draftCost + queueCost;
+
+  const queuedImageCount = queue.reduce((sum, item) => sum + item.n, 0) + (!isEditMode && economyMode && prompt.trim() ? n : 0);
+
   const maskableItem = referenceItems.length === 1 ? referenceItems[0] : null;
   const activeMask = maskableItem && maskableItem.key === maskOwnerKey ? maskFile : null;
 
   const busy = isGenerating || isEditing || isSubmittingBatch;
 
-  async function handleSubmit() {
+  function handleAddToQueue() {
     if (!prompt.trim()) {
       toast.error("Enter a prompt first");
       return;
     }
+    const tagValue = tag === NO_TAG ? null : tag;
+    setQueue((q) => [
+      ...q,
+      { id: crypto.randomUUID(), prompt, size, quality, format, background, model, n, tag: tagValue },
+    ]);
+    setPrompt("");
+    toast.success("Added to queue");
+  }
 
+  function removeQueueItem(id: string) {
+    setQueue((q) => q.filter((item) => item.id !== id));
+  }
+
+  async function handleSubmit() {
     const tagValue = tag === NO_TAG ? null : tag;
 
     if (!isEditMode && economyMode) {
+      // The current draft (if any) is submitted alongside whatever's already queued,
+      // without requiring an explicit "Add to queue" click first for the common
+      // single-prompt case.
+      const draft = prompt.trim() ? [{ prompt, size, quality, format, background, model, n, tag: tagValue }] : [];
+      const requests = [...queue.map(({ id: _id, ...rest }) => rest), ...draft];
+      if (requests.length === 0) {
+        toast.error("Add a prompt to the queue first");
+        return;
+      }
+
       setIsSubmittingBatch(true);
       try {
         const res = await fetch("/api/batch/generate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ prompt, size, quality, format, background, model, n, tag: tagValue }),
+          body: JSON.stringify({ requests }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Batch submission failed");
@@ -123,11 +175,18 @@ export function GeneratePanel({
         toast.success(
           `Batch submitted (${data.job.requestCount} image${data.job.requestCount > 1 ? "s" : ""}) — results in minutes to 24h`
         );
+        setQueue([]);
+        setPrompt("");
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "Batch submission failed");
       } finally {
         setIsSubmittingBatch(false);
       }
+      return;
+    }
+
+    if (!prompt.trim()) {
+      toast.error("Enter a prompt first");
       return;
     }
 
@@ -275,6 +334,43 @@ export function GeneratePanel({
           </Tooltip>
         )}
 
+        {!isEditMode && economyMode && (
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-sm">Prompt queue</Label>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 gap-1 text-xs"
+                onClick={handleAddToQueue}
+              >
+                <Plus className="size-3" /> Add to queue
+              </Button>
+            </div>
+            {queue.length > 0 && (
+              <ScrollArea className="max-h-40">
+                <div className="flex flex-col gap-1.5 pr-2">
+                  {queue.map((item) => (
+                    <div key={item.id} className="flex items-start gap-2 rounded-md bg-muted/50 p-1.5 text-xs">
+                      <span className="flex-1 line-clamp-2 text-foreground/90">{item.prompt}</span>
+                      <button
+                        onClick={() => removeQueueItem(item.id)}
+                        className="shrink-0 text-muted-foreground hover:text-foreground"
+                      >
+                        <X className="size-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </ScrollArea>
+            )}
+            <p className="text-xs text-muted-foreground">
+              Add different prompts to the queue, then submit them all as one batch job.
+            </p>
+          </div>
+        )}
+
         <div className="grid grid-cols-2 gap-3">
           {!isEditMode && (
             <div className="flex flex-col gap-1.5">
@@ -368,7 +464,11 @@ export function GeneratePanel({
         <Button onClick={handleSubmit} disabled={busy} className="w-full gap-2 justify-between">
           <span className="flex items-center gap-2">
             {busy ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
-            {isEditMode ? "Apply edit" : economyMode ? "Submit batch" : "Generate"}
+            {isEditMode
+              ? "Apply edit"
+              : economyMode
+              ? `Submit batch${queuedImageCount > 1 ? ` (${queuedImageCount})` : ""}`
+              : "Generate"}
           </span>
           <Badge
             variant="outline"
