@@ -103,7 +103,7 @@ src/
       batch/generate/route.ts    POST — submit an Economy-mode batch job to OpenAI's Batch API
       batch/route.ts             GET — list non-terminal batch_jobs (for gallery pending tiles)
       batch/poll/route.ts        POST — client-triggered check-and-ingest (Clerk-protected)
-      batch/cron/route.ts        GET — Vercel Cron target, check-and-ingest (CRON_SECRET-protected, public route)
+      batch/cron/route.ts        GET — cron target (Cloudflare Worker + Vercel Cron), check-and-ingest (CRON_SECRET-protected, public route)
   components/
     generate-panel.tsx          Prompt input, settings, tabs (Generate/Edit), Economy mode toggle, submit
     mask-editor.tsx             Canvas-based inpainting mask painter (Dialog)
@@ -159,7 +159,7 @@ vercel.json                     Vercel Cron config (hits /api/batch/cron daily a
 1. User flips the "Economy mode" switch in `generate-panel.tsx` (Generate tab only), which shows a `~50% cheaper` badge and swaps the cost estimate to `estimateCost() × 0.5`.
 2. Submitting posts JSON to `POST /api/batch/generate`: server builds a `.jsonl` (one line per requested image, `custom_id` = a fresh UUID, targeting `/v1/images/generations`), uploads it via `openai.files.create({ purpose: "batch" })`, creates the batch via `openai.batches.create({ input_file_id, endpoint: "/v1/images/generations", completion_window: "24h" })`, and inserts a `batch_jobs` row. No streaming, no live preview — the response is just a submission confirmation.
 3. `page.tsx` fetches `GET /api/batch` on mount and renders one dashed-border "Pending — up to 24h" placeholder tile per still-expected image (`sum of requestCount` across non-terminal jobs) — these placeholders are DB-backed, not client-memory-only, so they **survive a page reload** (a batch can take hours).
-4. While anything is pending, the client polls `POST /api/batch/poll` every 45s (responsiveness while a tab is open); a **Vercel Cron** hitting `GET /api/batch/cron` once a day (00:00 UTC) is the reliability backstop that keeps working even when nobody has the app open.
+4. While anything is pending, the client polls `POST /api/batch/poll` every 45s (responsiveness while a tab is open); a **Cloudflare Worker cron** hitting `GET /api/batch/cron` every 15 min (plus a daily Vercel Cron fallback) is the reliability backstop that keeps working even when nobody has the app open.
 5. Both poll routes call the same `checkAndIngestPendingBatches()` (`src/lib/batch-poll.ts`): retrieves the batch from OpenAI, updates status/counts, and — the first time it sees `status: "completed"` — fetches the output file, parses each line (correlating by `custom_id`, **not** line order, per OpenAI's own docs warning that output order isn't guaranteed), looks up the original request params, and calls the same `persistGeneratedImage()` the instant flow uses. The row then flips to our own `"ingested"` status so it's never re-processed. Once ingested, the resulting images just show up in the normal `/api/images` list and the placeholder tiles for that job naturally disappear (the job drops out of the non-terminal `GET /api/batch` list).
 
 ## 6. Cost Estimation
@@ -168,15 +168,16 @@ vercel.json                     Vercel Cron config (hits /api/batch/cron daily a
 
 ## 7. Auth & Access Control
 
-- Clerk (`clerkMiddleware` in `src/proxy.ts`) protects every route except `/sign-in(.*)`, `/sign-up(.*)`, and `/api/batch/cron(.*)` — "protected-first" pattern. The cron route is the one deliberate exception: Vercel's cron invocation carries no Clerk session, so it authenticates itself via a `CRON_SECRET` bearer token instead (checked inside the route handler, fails closed with 500 if `CRON_SECRET` isn't set).
+- Clerk (`clerkMiddleware` in `src/proxy.ts`) protects every route except `/sign-in(.*)`, `/sign-up(.*)`, and `/api/batch/cron(.*)` — "protected-first" pattern. The cron route is the one deliberate exception: cron invocations carry no Clerk session, so it authenticates itself via a `CRON_SECRET` bearer token instead (checked inside the route handler, fails closed with 500 if `CRON_SECRET` isn't set).
 - No role/permission model — single account, full access once signed in.
 - **Staying on Clerk development keys for now, by user decision** (usage-limited, shows a "Development mode" badge). Production keys would require running Clerk's interactive domain-setup wizard (`clerk deploy`) by hand — not automatable from an agent session. Revisit if/when usage limits become a problem.
 
 ## 8. Deployment
 
 - Vercel project `image-generator` (team `dcatcherexgmailcoms-projects`), Git-connected to `github.com/dcatcherex/image_generator`. Pushes to `master` auto-deploy to Production.
-- Env vars (Production/Preview/Development, set via `vercel env add`): `DATABASE_URL`(+`_UNPOOLED`), `BLOB_READ_WRITE_TOKEN`, `OPENAI_API_KEY`, `CLERK_SECRET_KEY`, `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, plus Clerk's sign-in/up redirect URL vars. **`CRON_SECRET` still needs to be added manually** (see §7, PLAN.md §10) — Economy mode's cron backstop won't authenticate without it.
+- Env vars (Production/Preview/Development, set via `vercel env add`): `DATABASE_URL`(+`_UNPOOLED`), `BLOB_READ_WRITE_TOKEN`, `OPENAI_API_KEY`, `CLERK_SECRET_KEY`, `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, plus Clerk's sign-in/up redirect URL vars, and `CRON_SECRET` (also stored as a secret on the Cloudflare Worker — keep both in sync; see PLAN.md §10).
 - `vercel.json` configures a Vercel Cron job hitting `/api/batch/cron` once a day (00:00 UTC). The Hobby plan only allows daily crons and **rejects deployments** with a more frequent schedule; on Pro+ this can go back to `*/15 * * * *`.
+- Cloudflare Worker `image-generator-cron` (dashboard-managed, not in this repo) has a Cron Trigger `*/15 * * * *` that `fetch`es `/api/batch/cron` with `Authorization: Bearer $CRON_SECRET` — this is the primary 15-min backstop on Hobby.
 - Local dev: `pnpm dev` (Turbopack — works fine under pnpm's strict `node_modules`; explicitly broke under npm's flat layout, hence the pnpm migration).
 - `drizzle-kit push` against `DATABASE_URL_UNPOOLED` (direct connection; pooled connection doesn't support the session-level operations migrations need). Run via `pnpm exec dotenv -e .env.local -- pnpm exec drizzle-kit push` since the CLI doesn't auto-load `.env.local`.
 
@@ -187,6 +188,5 @@ vercel.json                     Vercel Cron config (hits /api/batch/cron daily a
 - No automated mask suggestions (§1).
 - Economy mode not wired up for the Edit/Reference flow, and has no cancel-a-batch UI (§1, §5.5).
 - Economy mode's ingestion path (`src/lib/batch-poll.ts`) has been verified by code review against the OpenAI SDK's TypeScript definitions, but **not by a real batch actually completing end-to-end** — that takes real time and money and wasn't exercised live. Sanity-test with one small real batch before relying on it.
-- `CRON_SECRET` env var not yet set on Vercel — Economy mode's cron backstop currently fails closed (500) until this is added.
 - No tests (manual browser verification only, done ad hoc per feature).
 - Mobile/narrow-viewport layout has had one pass (mask editor overflow fix, gallery-primary mobile stacking) but hasn't been verified on a real narrow device/emulator this session — see PLAN.md §5.
