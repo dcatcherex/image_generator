@@ -21,6 +21,7 @@ const BATCH_POLL_INTERVAL_MS = 45_000;
 export default function Home() {
   const [images, setImages] = useState<ImageRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [prompt, setPrompt] = useState("");
   const [query, setQuery] = useState("");
   const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [tagFilter, setTagFilter] = useState<string>(ALL_TAGS_FILTER);
@@ -86,6 +87,10 @@ export default function Home() {
     setReferenceItems((prev) => [...prev, item]);
   }
 
+  function handleUseAsPrompt(image: ImageRecord) {
+    setPrompt(image.prompt);
+  }
+
   return (
     <div className="flex flex-col h-screen">
       <div className="flex flex-col-reverse lg:flex-row-reverse flex-1 min-h-0">
@@ -110,6 +115,8 @@ export default function Home() {
             <GeneratePanel
               onImageCreated={handleImageCreated}
               onBatchSubmitted={handleBatchSubmitted}
+              prompt={prompt}
+              setPrompt={setPrompt}
               referenceItems={referenceItems}
               setReferenceItems={setReferenceItems}
               generateStream={generateStream}
@@ -129,6 +136,7 @@ export default function Home() {
             onDelete={handleDelete}
             onImageUpdated={handleImageUpdated}
             onUseAsReference={handleUseAsReference}
+            onUseAsPrompt={handleUseAsPrompt}
             query={query}
             setQuery={setQuery}
             favoritesOnly={favoritesOnly}

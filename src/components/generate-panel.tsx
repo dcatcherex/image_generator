@@ -71,6 +71,8 @@ function AspectRatioIcon({ ratio }: { ratio: readonly [number, number] | null })
 export function GeneratePanel({
   onImageCreated,
   onBatchSubmitted,
+  prompt,
+  setPrompt,
   referenceItems,
   setReferenceItems,
   generateStream,
@@ -79,13 +81,14 @@ export function GeneratePanel({
 }: {
   onImageCreated: (image: ImageRecord) => void;
   onBatchSubmitted: (job: BatchJobRecord) => void;
+  prompt: string;
+  setPrompt: (prompt: string) => void;
   referenceItems: ReferenceItem[];
   setReferenceItems: (items: ReferenceItem[]) => void;
   generateStream: ReturnType<typeof useImageStream>;
   isEditing: boolean;
   setIsEditing: (v: boolean) => void;
 }) {
-  const [prompt, setPrompt] = useState("");
   const [aspectRatio, setAspectRatio] = useState<string>("auto");
   const [quality, setQuality] = useState<string>("medium");
   const [format, setFormat] = useState<string>("webp");

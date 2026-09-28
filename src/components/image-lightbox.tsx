@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
-import { ChevronLeft, ChevronRight, Download, Heart, Layers, Loader2, Tag as TagIcon, Trash2, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, Heart, Layers, Loader2, Tag as TagIcon, Trash2, Type, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -26,6 +26,7 @@ export function ImageLightbox({
   onDelete,
   onImageUpdated,
   onUseAsReference,
+  onUseAsPrompt,
 }: {
   images: ImageRecord[];
   index: number;
@@ -34,6 +35,7 @@ export function ImageLightbox({
   onDelete: (image: ImageRecord) => void;
   onImageUpdated: (image: ImageRecord) => void;
   onUseAsReference: (image: ImageRecord) => void;
+  onUseAsPrompt: (image: ImageRecord) => void;
 }) {
   const [deleting, setDeleting] = useState(false);
   const image = images[index];
@@ -113,6 +115,16 @@ export function ImageLightbox({
     } else {
       toast.error("Failed to update tag");
     }
+  }
+
+  function handleUseAsPromptClick() {
+    onUseAsPrompt(image);
+    onClose();
+  }
+
+  function handleUseAsReferenceClick() {
+    onUseAsReference(image);
+    onClose();
   }
 
   return (
@@ -219,23 +231,25 @@ export function ImageLightbox({
           <Badge variant="outline" className="text-[10px]">{image.quality}</Badge>
           <Badge variant="outline" className="text-[10px]">{image.model}</Badge>
         </div>
-
-        <div className="flex gap-1.5">
-          <Button size="icon" variant="secondary" className="size-8" onClick={() => onUseAsReference(image)}>
-            <Layers className="size-4" />
-          </Button>
-          <Button
-            size="icon"
-            variant="secondary"
-            className="size-8 ml-auto"
-            onClick={handleDelete}
-            disabled={deleting}
-          >
-            {deleting ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
-          </Button>
-        </div>
       </div>
       </ScrollArea>
+      <div className="flex shrink-0 gap-1.5 border-t p-4">
+        <Button size="icon" variant="secondary" className="size-8" onClick={handleUseAsPromptClick} aria-label="Use as prompt">
+          <Type className="size-4" />
+        </Button>
+        <Button size="icon" variant="secondary" className="size-8" onClick={handleUseAsReferenceClick} aria-label="Use as reference">
+          <Layers className="size-4" />
+        </Button>
+        <Button
+          size="icon"
+          variant="secondary"
+          className="size-8 ml-auto"
+          onClick={handleDelete}
+          disabled={deleting}
+        >
+          {deleting ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
+        </Button>
+      </div>
       </div>
 
       <div className="flex w-20 shrink-0 flex-col border-l bg-background">

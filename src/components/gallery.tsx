@@ -24,6 +24,7 @@ export function Gallery({
   onDelete,
   onImageUpdated,
   onUseAsReference,
+  onUseAsPrompt,
   query,
   setQuery,
   favoritesOnly,
@@ -41,6 +42,7 @@ export function Gallery({
   onDelete: (image: ImageRecord) => void;
   onImageUpdated: (image: ImageRecord) => void;
   onUseAsReference: (image: ImageRecord) => void;
+  onUseAsPrompt: (image: ImageRecord) => void;
   query: string;
   setQuery: (q: string) => void;
   favoritesOnly: boolean;
@@ -238,6 +240,7 @@ export function Gallery({
           onDelete={onDelete}
           onImageUpdated={onImageUpdated}
           onUseAsReference={onUseAsReference}
+          onUseAsPrompt={onUseAsPrompt}
         />
       )}
     </div>
