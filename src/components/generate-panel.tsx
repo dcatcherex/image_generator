@@ -36,7 +36,13 @@ import {
   estimateCostCalibrated,
   formatCostThb,
 } from "@/lib/pricing";
-import { defaultReferenceRole, type PromptInputs } from "@/lib/prompt-builder";
+import { Input } from "@/components/ui/input";
+import {
+  PRESERVE_OPTIONS,
+  defaultReferenceRole,
+  type PreserveId,
+  type PromptInputs,
+} from "@/lib/prompt-builder";
 import { useCostStats } from "@/lib/use-cost-stats";
 import { useLivePreview } from "@/lib/use-live-preview";
 import { ASSIGNABLE_TAGS } from "@/lib/tags";
@@ -124,6 +130,8 @@ export function GeneratePanel({
   const [tag, setTag] = useState<string>(NO_TAG);
   const [economyModeOn, setEconomyMode] = useState(false);
   const [compareToggle, setCompareToggle] = useState(false);
+  const [changeOnly, setChangeOnly] = useState("");
+  const [preserve, setPreserve] = useState<PreserveId[]>([]);
   // Hiding the Economy switch also turns the mode off, so a hidden toggle can't silently
   // keep routing generations through the slow batch path.
   const economyMode = visibility.economy && economyModeOn;
@@ -209,7 +217,17 @@ export function GeneratePanel({
 
   // What the server assembles the final prompt from (see buildPrompt); more fields join in
   // as the panel grows the matching inputs.
-  const promptInputs: PromptInputs = { base: prompt };
+  const promptInputs: PromptInputs = {
+    base: prompt,
+    // Edit-only constraints; hiding the section in Settings also stops sending them.
+    ...(isEditMode && visibility.preserve
+      ? { changeOnly: changeOnly.trim() || undefined, preserve: preserve.length ? preserve : undefined }
+      : {}),
+  };
+
+  function togglePreserve(id: PreserveId) {
+    setPreserve((prev) => (prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id]));
+  }
 
   function handleAddToQueue() {
     if (!prompt.trim()) {
@@ -383,6 +401,38 @@ export function GeneratePanel({
         </div>
 
         <div className="shrink-0 flex flex-col gap-2">
+          {isEditMode && visibility.preserve && (
+            <div className="flex flex-col gap-2">
+              <Input
+                value={changeOnly}
+                onChange={(e) => setChangeOnly(e.target.value)}
+                placeholder="Change only… (e.g. the jacket)"
+                aria-label="Change only"
+                className="h-8 text-xs"
+              />
+              <div className="flex flex-wrap gap-1.5" role="group" aria-label="Preserve">
+                {PRESERVE_OPTIONS.map((opt) => {
+                  const on = preserve.includes(opt.id);
+                  return (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      aria-pressed={on}
+                      title={`Preserve: ${opt.text}`}
+                      onClick={() => togglePreserve(opt.id)}
+                      className={`rounded-full border px-2 py-0.5 text-[11px] transition-colors ${
+                        on
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : "text-muted-foreground hover:bg-muted"
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           <ReferenceImagesPicker items={referenceItems} onChange={setReferenceItems} />
 
           {maskableItem && (

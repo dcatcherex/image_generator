@@ -14,6 +14,7 @@ export const PANEL_OPTIONS = [
   { id: "background", label: "Background" },
   { id: "tag", label: "Tag" },
   { id: "model", label: "Model" },
+  { id: "preserve", label: "Change only / Preserve" },
   { id: "compare", label: "Compare models" },
 ] as const;
 
