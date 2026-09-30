@@ -14,6 +14,7 @@ export const PANEL_OPTIONS = [
   { id: "background", label: "Background" },
   { id: "tag", label: "Tag" },
   { id: "model", label: "Model" },
+  { id: "compare", label: "Compare models" },
 ] as const;
 
 export type PanelOptionId = (typeof PANEL_OPTIONS)[number]["id"];

@@ -5,6 +5,7 @@ import { ImageIcon } from "lucide-react";
 import { UserButton } from "@clerk/nextjs";
 import { GeneratePanel } from "@/components/generate-panel";
 import { Gallery } from "@/components/gallery";
+import { CompareDialog } from "@/components/compare-dialog";
 import { SettingsDialog } from "@/components/settings-dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { referenceItemFromImage, type ReferenceItem } from "@/lib/reference-items";
@@ -30,6 +31,8 @@ export function Home() {
   const [pendingBatchJobs, setPendingBatchJobs] = useState<BatchJobRecord[]>([]);
   const [isEditing, setIsEditing] = useState(false);
   const generateStream = useImageStream();
+  const compareStream = useImageStream();
+  const [compareImages, setCompareImages] = useState<ImageRecord[] | null>(null);
   const galleryView = useGalleryView();
   const panelOptions = usePanelOptions();
 
@@ -93,6 +96,15 @@ export function Home() {
     setPrompt(image.prompt);
   }
 
+  // One placeholder tile per image still expected from each active stream (the first tile of a
+  // stream shows its live partial frame, if preview is on); an edit shows a single tile.
+  const pendingPreviews: Array<string | null> = [generateStream, compareStream].flatMap((s) =>
+    s.isGenerating
+      ? Array.from({ length: Math.max(s.pendingCount, 1) }, (_, i) => (i === 0 ? s.partialB64 : null))
+      : []
+  );
+  if (isEditing && pendingPreviews.length === 0) pendingPreviews.push(null);
+
   return (
     <div className="flex flex-col h-screen">
       <div className="flex flex-col-reverse lg:flex-row-reverse flex-1 min-h-0">
@@ -124,6 +136,8 @@ export function Home() {
               referenceItems={referenceItems}
               setReferenceItems={setReferenceItems}
               generateStream={generateStream}
+              compareStream={compareStream}
+              onCompareDone={setCompareImages}
               visibility={panelOptions.visibility}
               isEditing={isEditing}
               setIsEditing={setIsEditing}
@@ -148,15 +162,21 @@ export function Home() {
             setFavoritesOnly={setFavoritesOnly}
             tagFilter={tagFilter}
             setTagFilter={setTagFilter}
-            isGenerating={generateStream.isGenerating || isEditing}
-            partialPreview={generateStream.partialB64}
-            pendingCount={generateStream.pendingCount}
+            pendingPreviews={pendingPreviews}
             pendingBatchJobs={pendingBatchJobs}
             view={galleryView.view}
             columns={galleryView.columns}
           />
         )}
       </div>
+
+      {compareImages && (
+        <CompareDialog
+          images={compareImages}
+          onClose={() => setCompareImages(null)}
+          onDelete={handleDelete}
+        />
+      )}
     </div>
   );
 }

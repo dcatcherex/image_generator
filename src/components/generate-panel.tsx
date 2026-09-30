@@ -23,6 +23,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   ASPECT_RATIOS,
   MODEL,
+  modelShortName,
   N_OPTIONS,
   QUALITY_OPTIONS,
   SIZE_TIERS,
@@ -89,6 +90,8 @@ export function GeneratePanel({
   referenceItems,
   setReferenceItems,
   generateStream,
+  compareStream,
+  onCompareDone,
   visibility,
   isEditing,
   setIsEditing,
@@ -100,6 +103,9 @@ export function GeneratePanel({
   referenceItems: ReferenceItem[];
   setReferenceItems: (items: ReferenceItem[]) => void;
   generateStream: ReturnType<typeof useImageStream>;
+  // Second stream instance so the two comparison requests can run side by side.
+  compareStream: ReturnType<typeof useImageStream>;
+  onCompareDone: (images: ImageRecord[]) => void;
   visibility: PanelOptionVisibility;
   isEditing: boolean;
   setIsEditing: (v: boolean) => void;
@@ -115,6 +121,7 @@ export function GeneratePanel({
   const [n, setN] = useState<number>(1);
   const [tag, setTag] = useState<string>(NO_TAG);
   const [economyModeOn, setEconomyMode] = useState(false);
+  const [compareToggle, setCompareToggle] = useState(false);
   // Hiding the Economy switch also turns the mode off, so a hidden toggle can't silently
   // keep routing generations through the slow batch path.
   const economyMode = visibility.economy && economyModeOn;
@@ -146,6 +153,9 @@ export function GeneratePanel({
   // Only the instant single-image generate path streams; edits, batches (n > 1) and Economy
   // mode never do, so they never pay for previews.
   const previewApplies = !isEditMode && !economyMode && n === 1;
+  // Comparing runs both models as instant single-image generations, so it has the same
+  // preconditions as previews.
+  const compareOn = visibility.compare && compareToggle && previewApplies;
   const previewOn = visibility.preview && livePreview.preview && previewApplies;
   const partials = previewOn ? PREVIEW_PARTIALS : 0;
 
@@ -155,14 +165,16 @@ export function GeneratePanel({
   }, [aspectRatio, tier]);
 
   const draft = useMemo(() => {
-    const one = estimateCostCalibrated(costStats.stats, model, quality, size, {
-      partials,
-      promptChars: prompt.length,
-    });
+    const estimate = (m: string) =>
+      estimateCostCalibrated(costStats.stats, m, quality, size, { partials, promptChars: prompt.length });
     const count = isEditMode ? 1 : n;
     const mult = !isEditMode && economyMode ? BATCH_PRICE_MULTIPLIER : 1;
-    return { usd: one.usd * count * mult, approximate: one.approximate };
-  }, [costStats.stats, model, quality, size, partials, prompt.length, isEditMode, n, economyMode]);
+    const estimates = compareOn ? MODEL.map(estimate) : [estimate(model)];
+    return {
+      usd: estimates.reduce((sum, e) => sum + e.usd, 0) * count * mult,
+      approximate: estimates.some((e) => e.approximate),
+    };
+  }, [costStats.stats, model, quality, size, partials, prompt.length, isEditMode, n, economyMode, compareOn]);
 
   // Queued items are only submitted (and thus only priced) in Economy mode, so no
   // separate "instant" branch is needed here the way the draft has one.
@@ -191,7 +203,7 @@ export function GeneratePanel({
   const maskableItem = referenceItems.length === 1 ? referenceItems[0] : null;
   const activeMask = maskableItem && maskableItem.key === maskOwnerKey ? maskFile : null;
 
-  const busy = isGenerating || isEditing || isSubmittingBatch;
+  const busy = isGenerating || compareStream.isGenerating || isEditing || isSubmittingBatch;
 
   function handleAddToQueue() {
     if (!prompt.trim()) {
@@ -250,6 +262,31 @@ export function GeneratePanel({
 
     if (!prompt.trim()) {
       toast.error("Enter a prompt first");
+      return;
+    }
+
+    if (compareOn) {
+      // Same payload for both models, tied together by a client-made group id so the pair
+      // can be found again later. Each stream reports into its own gallery tile.
+      const compareGroupId = crypto.randomUUID();
+      const payload = { prompt, size, quality, format, background, compression, n: 1, tag: tagValue, preview: previewOn, compareGroupId };
+      const results: ImageRecord[] = [];
+      await Promise.all(
+        [generateStream, compareStream].map((stream, i) =>
+          stream.generate({ ...payload, model: MODEL[i] }, (image, warning) => {
+            onImageCreated(image);
+            results.push(image);
+            if (warning) toast.warning(warning);
+          })
+        )
+      );
+      costStats.refresh();
+      if (results.length === MODEL.length) {
+        // Order by MODEL so the dialog's left/right slots are stable.
+        onCompareDone([...results].sort((a, b) => MODEL.indexOf(a.model as (typeof MODEL)[number]) - MODEL.indexOf(b.model as (typeof MODEL)[number])));
+      } else {
+        toast.error("One of the two models failed — the other image was kept in the gallery");
+      }
       return;
     }
 
@@ -400,6 +437,22 @@ export function GeneratePanel({
               instead of appearing instantly.
             </TooltipContent>
           </Tooltip>
+        )}
+
+        {visibility.compare && previewApplies && (
+          <div className="flex items-center justify-between rounded-md border px-3 py-2">
+            <div className="flex flex-col">
+              <Label htmlFor="compare-models" className="text-sm">Compare models</Label>
+              <span className="text-xs text-muted-foreground">
+                {MODEL.map(modelShortName).join(" vs ")}, same settings
+              </span>
+            </div>
+            <Switch
+              id="compare-models"
+              checked={compareToggle}
+              onCheckedChange={(v) => setCompareToggle(Boolean(v))}
+            />
+          </div>
         )}
 
         {visibility.preview && previewApplies && (
@@ -567,7 +620,7 @@ export function GeneratePanel({
           </div>
         )}
 
-        {visibility.model && (
+        {visibility.model && !compareOn && (
           <div className="flex flex-col gap-1.5">
             <Label>Model</Label>
             <Select value={model} onValueChange={(v) => v && setModel(v)}>

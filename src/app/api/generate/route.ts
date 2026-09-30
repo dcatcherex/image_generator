@@ -5,6 +5,8 @@ import { persistGeneratedImage, transparencyWarning } from "@/lib/save-image";
 import { sseStreamFromEvents } from "@/lib/sse";
 import { actualSizeOr, usageToFields, type ImageUsage } from "@/lib/pricing";
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 // Streamed partial images requested when live preview is on (each bills 100 output tokens).
 const PREVIEW_PARTIALS = 2;
 
@@ -26,6 +28,7 @@ export async function POST(req: NextRequest) {
     tag = null,
     preview = false,
     compression: rawCompression = null,
+    compareGroupId: rawCompareGroupId = null,
   } = body ?? {};
 
   if (!prompt || typeof prompt !== "string") {
@@ -42,6 +45,9 @@ export async function POST(req: NextRequest) {
     return new Response(JSON.stringify({ error: formatError }), { status: 400 });
   }
   const compression = normalizeCompression(format, rawCompression);
+  // Shared by the two images of a model comparison; anything that isn't a UUID is ignored.
+  const compareGroupId =
+    typeof rawCompareGroupId === "string" && UUID_RE.test(rawCompareGroupId) ? rawCompareGroupId : null;
 
   // OpenAI supports n up to 10, but we cap at 4 to match the UI's n selector.
   const count = Math.min(Math.max(Number(n) || 1, 1), 4);
@@ -123,6 +129,7 @@ export async function POST(req: NextRequest) {
         tag,
         previewPartials: partials,
         outputCompression: compression,
+        compareGroupId,
         durationMs,
         ...usageToFields(usage),
       });
@@ -168,6 +175,7 @@ export async function POST(req: NextRequest) {
         tag,
         previewPartials: 0,
         outputCompression: compression,
+        compareGroupId,
         durationMs,
         // The response reports usage for the whole request; split it across the images.
         ...usageToFields(response.usage, { count: items.length }),

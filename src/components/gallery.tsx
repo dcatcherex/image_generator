@@ -31,9 +31,7 @@ export function Gallery({
   setFavoritesOnly,
   tagFilter,
   setTagFilter,
-  isGenerating,
-  partialPreview,
-  pendingCount = 0,
+  pendingPreviews,
   pendingBatchJobs = [],
   view,
   columns,
@@ -49,9 +47,8 @@ export function Gallery({
   setFavoritesOnly: (v: boolean) => void;
   tagFilter: string;
   setTagFilter: (t: string) => void;
-  isGenerating: boolean;
-  partialPreview: string | null;
-  pendingCount?: number;
+  // One entry per in-flight placeholder tile; a string is that tile's latest partial preview frame.
+  pendingPreviews: Array<string | null>;
   pendingBatchJobs?: BatchJobRecord[];
   view: GalleryViewMode;
   columns: number;
@@ -75,13 +72,11 @@ export function Gallery({
 
   const renderItems = useMemo<RenderItem[]>(() => {
     const items: RenderItem[] = [];
-    if (isGenerating) {
-      for (let i = 0; i < Math.max(pendingCount, 1); i++) items.push({ kind: "pending", index: i });
-    }
+    for (let i = 0; i < pendingPreviews.length; i++) items.push({ kind: "pending", index: i });
     for (let i = 0; i < batchPendingCount; i++) items.push({ kind: "batchPending", index: i });
     for (const image of filtered) items.push({ kind: "image", image });
     return items;
-  }, [isGenerating, pendingCount, batchPendingCount, filtered]);
+  }, [pendingPreviews, batchPendingCount, filtered]);
 
   // Placeholders render as squares (their real size isn't known yet), so they get a
   // neutral 1:1 weight; real images use their stored size to estimate how tall they'll
@@ -100,9 +95,9 @@ export function Gallery({
           key={`pending-${item.index}`}
           className="relative aspect-square rounded-lg overflow-hidden border bg-card"
         >
-          {item.index === 0 && partialPreview ? (
+          {pendingPreviews[item.index] ? (
             <Image
-              src={`data:image/png;base64,${partialPreview}`}
+              src={`data:image/png;base64,${pendingPreviews[item.index]}`}
               alt="Generating preview"
               fill
               className="object-cover"
@@ -206,7 +201,7 @@ export function Gallery({
         </div>
       </div>
 
-      {filtered.length === 0 && !isGenerating && batchPendingCount === 0 ? (
+      {filtered.length === 0 && pendingPreviews.length === 0 && batchPendingCount === 0 ? (
         <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground">
           No images yet. Generate your first one on the right.
         </div>

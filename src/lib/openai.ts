@@ -11,6 +11,12 @@ export function getOpenAI() {
 
 export const MODEL = ["gpt-image-2.5-sunburst", "gpt-image-2.5-flare"] as const;
 
+/** "gpt-image-2.5-flare" -> "Flare" (for compact labels). */
+export function modelShortName(model: string): string {
+  const last = model.split("-").pop() ?? model;
+  return last.charAt(0).toUpperCase() + last.slice(1);
+}
+
 export type ImageModel = (typeof MODEL)[number];
 
 export const QUALITY_OPTIONS = ["auto", "low", "medium", "high", "xhigh", "max"] as const;
