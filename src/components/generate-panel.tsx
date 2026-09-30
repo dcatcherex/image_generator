@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Loader2, Maximize, Paintbrush2, Plus, Sparkles, X } from "lucide-react";
+import { ChevronDown, Loader2, Maximize, Paintbrush2, Plus, Sparkles, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -101,6 +101,8 @@ export function GeneratePanel({
   generateStream,
   compareStream,
   onCompareDone,
+  exactText,
+  setExactText,
   changeOnly,
   setChangeOnly,
   preserve,
@@ -121,7 +123,9 @@ export function GeneratePanel({
   // Second stream instance so the two comparison requests can run side by side.
   compareStream: ReturnType<typeof useImageStream>;
   onCompareDone: (images: ImageRecord[]) => void;
-  // Lifted to Home so "Refine" can pre-fill them along with the prompt and references.
+  // Lifted to Home so "Refine" / "Use as prompt" can pre-fill them along with the prompt.
+  exactText: string;
+  setExactText: (v: string) => void;
   changeOnly: string;
   setChangeOnly: (v: string) => void;
   preserve: PreserveId[];
@@ -154,6 +158,7 @@ export function GeneratePanel({
   const [maskEditorOpen, setMaskEditorOpen] = useState(false);
   const [compositeMask, setCompositeMask] = useState(true);
   // A preset waiting on the user's OK because it would overwrite a non-empty prompt.
+  const [exactTextOpen, setExactTextOpen] = useState(false);
   const [pendingPreset, setPendingPreset] = useState<PromptPreset | null>(null);
 
   const { generate, isGenerating, error } = generateStream;
@@ -234,6 +239,7 @@ export function GeneratePanel({
   // as the panel grows the matching inputs.
   const promptInputs: PromptInputs = {
     base: prompt,
+    exactText: visibility.exactText ? exactText.trim() || undefined : undefined,
     // Edit-only constraints; hiding the section in Settings also stops sending them.
     ...(isEditMode && visibility.preserve
       ? { changeOnly: changeOnly.trim() || undefined, preserve: preserve.length ? preserve : undefined }
@@ -480,6 +486,38 @@ export function GeneratePanel({
             }
             className="field-sizing-fixed h-full flex-1 resize-none overflow-y-auto"
           />
+          {visibility.exactText && (
+            <div className="flex shrink-0 flex-col gap-1.5">
+              {/* Stays open while it has content, so a restored value is never hidden. */}
+              <button
+                type="button"
+                aria-expanded={exactTextOpen || exactText.length > 0}
+                onClick={() => setExactTextOpen((v) => !v)}
+                className="flex items-center gap-1 self-start text-xs text-muted-foreground hover:text-foreground"
+              >
+                <ChevronDown
+                  className={`size-3 transition-transform ${exactTextOpen || exactText ? "" : "-rotate-90"}`}
+                />
+                Exact text{exactText.trim() && " ✓"}
+              </button>
+              {(exactTextOpen || exactText.length > 0) && (
+                <>
+                  <Textarea
+                    value={exactText}
+                    onChange={(e) => setExactText(e.target.value)}
+                    placeholder="Text to render verbatim, exactly once…"
+                    aria-label="Exact text"
+                    className="field-sizing-fixed h-16 resize-none text-xs"
+                  />
+                  {quality === "low" && exactText.trim() && (
+                    <p className="text-xs text-muted-foreground">
+                      Small text renders better at medium or higher.
+                    </p>
+                  )}
+                </>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="shrink-0 flex flex-col gap-2">

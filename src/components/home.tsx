@@ -31,6 +31,7 @@ export function Home() {
   const [referenceItems, setReferenceItems] = useState<ReferenceItem[]>([]);
   const [pendingBatchJobs, setPendingBatchJobs] = useState<BatchJobRecord[]>([]);
   const [isEditing, setIsEditing] = useState(false);
+  const [exactText, setExactText] = useState("");
   const [changeOnly, setChangeOnly] = useState("");
   const [preserve, setPreserve] = useState<PreserveId[]>([]);
   const [parentImageId, setParentImageId] = useState<string | null>(null);
@@ -111,7 +112,13 @@ export function Home() {
 
   function handleUseAsPrompt(image: ImageRecord) {
     // Restore what the user typed, not the assembled text (older images have no inputs).
-    setPrompt(image.promptInputs?.base ?? image.prompt);
+    const inputs = image.promptInputs;
+    setPrompt(inputs?.base ?? image.prompt);
+    setExactText(inputs?.exactText ?? "");
+    // Only overwrite the edit constraints when the image actually recorded some, so using a
+    // plain generate image's prompt mid-edit doesn't wipe the chips the user just picked.
+    if (inputs?.changeOnly != null) setChangeOnly(inputs.changeOnly);
+    if (inputs?.preserve) setPreserve(inputs.preserve);
   }
 
   // One placeholder tile per image still expected from each active stream (the first tile of a
@@ -156,6 +163,8 @@ export function Home() {
               generateStream={generateStream}
               compareStream={compareStream}
               onCompareDone={setCompareImages}
+              exactText={exactText}
+              setExactText={setExactText}
               changeOnly={changeOnly}
               setChangeOnly={setChangeOnly}
               preserve={preserve}

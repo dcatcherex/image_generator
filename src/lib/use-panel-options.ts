@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 
 export const PANEL_OPTIONS = [
   { id: "presets", label: "Presets" },
+  { id: "exactText", label: "Exact text" },
   { id: "economy", label: "Economy mode" },
   { id: "preview", label: "Live preview" },
   { id: "batch", label: "Batch (n)" },
