@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ImageIcon } from "lucide-react";
+import { ImageIcon, MessageSquare } from "lucide-react";
 import { UserButton } from "@clerk/nextjs";
 import { GeneratePanel } from "@/components/generate-panel";
 import { Gallery } from "@/components/gallery";
@@ -9,6 +9,8 @@ import { CompareDialog } from "@/components/compare-dialog";
 import { HelpDialog } from "@/components/help-dialog";
 import { SettingsDialog } from "@/components/settings-dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Button } from "@/components/ui/button";
+import { ReadOnlyProvider } from "@/lib/read-only";
 import { referenceItemFromImage, type ReferenceItem } from "@/lib/reference-items";
 import { useImageStream } from "@/lib/use-image-stream";
 import { useGalleryView } from "@/lib/use-gallery-view";
@@ -22,7 +24,10 @@ import type { BatchJobRecord, ImageRecord } from "@/lib/types";
 // that keeps working even when no tab is open — this is purely for in-session responsiveness.
 const BATCH_POLL_INTERVAL_MS = 45_000;
 
-export function Home() {
+// Where the Feedback button points (e.g. a Google Form). The button is hidden when unset.
+const FEEDBACK_URL = process.env.NEXT_PUBLIC_FEEDBACK_URL;
+
+export function Home({ readOnly }: { readOnly: boolean }) {
   const [images, setImages] = useState<ImageRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [prompt, setPrompt] = useState("");
@@ -62,7 +67,9 @@ export function Home() {
 
     const interval = setInterval(async () => {
       try {
-        await fetch("/api/batch/poll", { method: "POST" });
+        // Ingesting finished batches writes to the gallery, so only the owner triggers it;
+        // viewers just refresh and rely on the cron backstop.
+        if (!readOnly) await fetch("/api/batch/poll", { method: "POST" });
         const [imagesRes, batchRes] = await Promise.all([
           fetch("/api/images").then((r) => r.json()),
           fetch("/api/batch").then((r) => r.json()),
@@ -75,7 +82,7 @@ export function Home() {
     }, BATCH_POLL_INTERVAL_MS);
 
     return () => clearInterval(interval);
-  }, [pendingBatchJobs.length]);
+  }, [pendingBatchJobs.length, readOnly]);
 
   function handleBatchSubmitted(job: BatchJobRecord) {
     setPendingBatchJobs((prev) => [job, ...prev]);
@@ -132,6 +139,7 @@ export function Home() {
   if (isEditing && pendingPreviews.length === 0) pendingPreviews.push(null);
 
   return (
+    <ReadOnlyProvider value={readOnly}>
     <div className="flex flex-col h-screen">
       <div className="flex flex-col-reverse lg:flex-row-reverse flex-1 min-h-0">
         <div className="lg:w-[340px] shrink-0 flex flex-col max-h-[45vh] lg:max-h-none lg:h-full min-h-0 border-b lg:border-b-0 lg:border-l bg-background">
@@ -141,6 +149,19 @@ export function Home() {
               Image Studio
             </h1>
             <div className="flex items-center gap-3">
+              {FEEDBACK_URL && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-8"
+                  aria-label="Send feedback"
+                  title="Send feedback"
+                  nativeButton={false}
+                  render={<a href={FEEDBACK_URL} target="_blank" rel="noreferrer" />}
+                >
+                  <MessageSquare className="size-4" />
+                </Button>
+              )}
               <HelpDialog />
               <SettingsDialog
                 view={galleryView.view}
@@ -150,11 +171,20 @@ export function Home() {
                 panelVisibility={panelOptions.visibility}
                 setPanelOptionVisible={panelOptions.setOptionVisible}
               />
-              <UserButton />
+              {!readOnly && <UserButton />}
             </div>
           </div>
 
+          {readOnly && (
+            <p className="px-4 py-2 border-b text-xs text-muted-foreground bg-muted/50">
+              View-only beta — you can browse everything, but generating and editing are off.
+              {FEEDBACK_URL && " Use the feedback button above to tell me what you think."}
+            </p>
+          )}
+
           <ScrollArea className="flex-1 min-h-0">
+            {/* A disabled fieldset disables every control in the panel for viewers at once. */}
+            <fieldset disabled={readOnly} className="min-w-0 border-0 p-0 m-0">
             <GeneratePanel
               onImageCreated={handleImageCreated}
               onBatchSubmitted={handleBatchSubmitted}
@@ -177,6 +207,7 @@ export function Home() {
               isEditing={isEditing}
               setIsEditing={setIsEditing}
             />
+            </fieldset>
           </ScrollArea>
         </div>
 
@@ -214,5 +245,6 @@ export function Home() {
         />
       )}
     </div>
+    </ReadOnlyProvider>
   );
 }

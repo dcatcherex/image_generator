@@ -1,4 +1,4 @@
-import { requireUser } from "@/lib/require-user";
+import { requireOwner } from "@/lib/require-owner";
 import { NextResponse } from "next/server";
 import { checkAndIngestPendingBatches } from "@/lib/batch-poll";
 
@@ -9,7 +9,7 @@ export const maxDuration = 60;
 // the reliability backstop that keeps working even when nobody has the app open — this route
 // is purely a "check sooner" convenience and does the exact same work.
 export async function POST() {
-  const denied = await requireUser();
+  const denied = await requireOwner();
   if (denied) return denied;
 
   const result = await checkAndIngestPendingBatches();

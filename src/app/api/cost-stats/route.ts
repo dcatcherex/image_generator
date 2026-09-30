@@ -1,4 +1,3 @@
-import { requireUser } from "@/lib/require-user";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { getDb } from "@/db";
@@ -6,9 +5,6 @@ import { images } from "@/db/schema";
 import type { CostStats } from "@/lib/pricing";
 
 export async function GET() {
-  const denied = await requireUser();
-  if (denied) return denied;
-
   // Requiring duration_ms drops batch rows (they never get one), so their 50%-discounted
   // costs can't skew the instant-mode medians. Grouped by requested_size because that's
   // what's known before generating.

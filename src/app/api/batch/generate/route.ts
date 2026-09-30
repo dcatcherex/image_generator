@@ -1,4 +1,4 @@
-import { requireUser } from "@/lib/require-user";
+import { requireOwner } from "@/lib/require-owner";
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { toFile } from "openai";
@@ -26,7 +26,7 @@ type QueuedRequest = {
 };
 
 export async function POST(req: NextRequest) {
-  const denied = await requireUser();
+  const denied = await requireOwner();
   if (denied) return denied;
 
   const body = await req.json();

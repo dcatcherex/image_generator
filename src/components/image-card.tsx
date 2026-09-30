@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/select";
 import { formatDuration, imageCostLabel } from "@/lib/pricing";
 import { ASSIGNABLE_TAGS } from "@/lib/tags";
+import { useReadOnly } from "@/lib/read-only";
 import type { ImageRecord } from "@/lib/types";
 
 const NO_TAG = "No tag";
@@ -43,6 +44,7 @@ export function ImageCard({
   onOpen?: () => void;
   masonry?: boolean;
 }) {
+  const readOnly = useReadOnly();
   const [deleting, setDeleting] = useState(false);
 
   async function handleDelete() {
@@ -127,6 +129,7 @@ export function ImageCard({
             </Badge>
           )}
         </div>
+        {!readOnly && (
         <div className="flex gap-1">
           <Tooltip>
             <TooltipTrigger
@@ -139,6 +142,7 @@ export function ImageCard({
             <TooltipContent>Favorite</TooltipContent>
           </Tooltip>
         </div>
+        )}
       </div>
 
       <div className="absolute inset-x-0 bottom-0 p-2 flex flex-col gap-1.5 bg-gradient-to-t from-background/90 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
@@ -150,6 +154,8 @@ export function ImageCard({
           </p>
         )}
         <div className="flex gap-1">
+          {!readOnly && (
+          <>
           <Tooltip>
             <TooltipTrigger
               render={
@@ -187,6 +193,8 @@ export function ImageCard({
               ))}
             </SelectContent>
           </Select>
+          </>
+          )}
           <Tooltip>
             <TooltipTrigger
               render={
@@ -199,6 +207,7 @@ export function ImageCard({
             />
             <TooltipContent>Download</TooltipContent>
           </Tooltip>
+          {!readOnly && (
           <Tooltip>
             <TooltipTrigger
               render={
@@ -215,6 +224,7 @@ export function ImageCard({
             />
             <TooltipContent>Delete</TooltipContent>
           </Tooltip>
+          )}
         </div>
       </div>
     </div>

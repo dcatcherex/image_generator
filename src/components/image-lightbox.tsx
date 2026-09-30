@@ -16,6 +16,7 @@ import {
 import { formatDuration, imageCostLabel } from "@/lib/pricing";
 import { ASSIGNABLE_TAGS } from "@/lib/tags";
 import { getVersionChain } from "@/lib/version-chain";
+import { useReadOnly } from "@/lib/read-only";
 import type { ImageRecord } from "@/lib/types";
 
 const NO_TAG = "No tag";
@@ -44,6 +45,7 @@ export function ImageLightbox({
   onUseAsPrompt: (image: ImageRecord) => void;
   onRefine: (image: ImageRecord) => void;
 }) {
+  const readOnly = useReadOnly();
   const [deleting, setDeleting] = useState(false);
   const image = images[index];
   const activeThumbRef = useRef<HTMLButtonElement>(null);
@@ -145,6 +147,8 @@ export function ImageLightbox({
     <div className="fixed inset-0 z-50 flex bg-background/95 backdrop-blur-sm" onWheel={handleWheel}>
       <div className="relative flex flex-1 items-center justify-center p-4 lg:p-8">
         <div className="absolute top-3 right-3 z-10 flex items-center gap-2">
+          {!readOnly && (
+          <>
           <Select value={image.tag ?? NO_TAG} onValueChange={(v) => v && handleTagChange(v)}>
             <SelectTrigger
               size="sm"
@@ -171,6 +175,8 @@ export function ImageLightbox({
           >
             <Heart className={image.favorite ? "size-4 fill-red-500 text-red-500" : "size-4"} />
           </Button>
+          </>
+          )}
           <Button
             size="icon"
             variant="secondary"
@@ -289,6 +295,7 @@ export function ImageLightbox({
         )}
       </div>
       </ScrollArea>
+      {!readOnly && (
       <div className="flex shrink-0 gap-1.5 border-t p-4">
         <Button size="icon" variant="secondary" className="size-8" onClick={handleUseAsPromptClick} aria-label="Use as prompt">
           <Type className="size-4" />
@@ -309,6 +316,7 @@ export function ImageLightbox({
           {deleting ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
         </Button>
       </div>
+      )}
       </div>
 
       <div className="flex w-20 shrink-0 flex-col border-l bg-background">

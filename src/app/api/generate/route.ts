@@ -1,4 +1,4 @@
-import { requireUser } from "@/lib/require-user";
+import { requireOwner } from "@/lib/require-owner";
 import { NextRequest } from "next/server";
 import { getOpenAI, MODEL, normalizeCompression, validateFormatBackground, validateSize } from "@/lib/openai";
 import { persistGeneratedImage, transparencyWarning } from "@/lib/save-image";
@@ -14,7 +14,7 @@ const PREVIEW_PARTIALS = 2;
 export const maxDuration = 300;
 
 export async function POST(req: NextRequest) {
-  const denied = await requireUser();
+  const denied = await requireOwner();
   if (denied) return denied;
 
   const body = await req.json();

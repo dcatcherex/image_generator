@@ -1,4 +1,4 @@
-import { requireUser } from "@/lib/require-user";
+import { requireOwner } from "@/lib/require-owner";
 import { NextRequest, NextResponse } from "next/server";
 import type OpenAI from "openai";
 import { getOpenAI, MODEL, normalizeCompression, validateFormatBackground, validateSize } from "@/lib/openai";
@@ -10,7 +10,7 @@ import { actualSizeOr, usageToFields } from "@/lib/pricing";
 export const maxDuration = 300;
 
 export async function POST(req: NextRequest) {
-  const denied = await requireUser();
+  const denied = await requireOwner();
   if (denied) return denied;
 
   const form = await req.formData();

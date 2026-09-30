@@ -27,6 +27,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Image Studio",
   description: "Generate and manage OpenAI images",
+  robots: { index: false, follow: false },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

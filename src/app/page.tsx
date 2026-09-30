@@ -1,8 +1,8 @@
-import { auth } from "@clerk/nextjs/server";
 import { Home } from "@/components/home";
+import { isOwner } from "@/lib/require-owner";
 
-// Resource-level auth check: proxy.ts no longer gates routes, so protect the page here.
+// Public page: viewers get a read-only UI, the owner gets everything. Write routes enforce
+// ownership on the server regardless of what the UI shows.
 export default async function Page() {
-  await auth.protect();
-  return <Home />;
+  return <Home readOnly={!(await isOwner())} />;
 }

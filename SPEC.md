@@ -1,13 +1,13 @@
 # Image Studio — Spec
 
-A private, single-user web app for generating and managing images with OpenAI's image models. Built with Next.js, Neon Postgres, Vercel Blob, and Clerk auth, deployed on Vercel.
+A single-owner web app (with a public, view-only beta for family/friends) for generating and managing images with OpenAI's image models. Built with Next.js, Neon Postgres, Vercel Blob, and Clerk auth, deployed on Vercel.
 
 **Live**: https://image-generator-ruddy-one.vercel.app
 **Repo**: https://github.com/dcatcherex/image_generator
 
 ## 1. Purpose & Scope
 
-A personal tool to generate, edit, and organize AI-generated images without the friction of ChatGPT/Playground UIs. Not a multi-tenant product — one account (via Clerk), no team/sharing features, no billing.
+A personal tool to generate, edit, and organize AI-generated images without the friction of ChatGPT/Playground UIs. Not a multi-tenant product — one owner account (via Clerk), no team features, no billing. Anyone with the link can browse the gallery read-only (see §7).
 
 **In scope (v1, built):**
 - Text-to-image generation with live streaming preview
@@ -22,11 +22,11 @@ A personal tool to generate, edit, and organize AI-generated images without the 
 - Edit workflow: reference roles, change-only/preserve constraints, Refine loop with a versions strip, mask compositing (see §5.2)
 - Prompt authoring: presets and an exact-text input, assembled by `buildPrompt()` (see §5.7)
 - "Economy mode" — real OpenAI Batch API submission for ~50% cheaper, async (up to 24h) generation, as a separate opt-in path (see §5.5)
-- Auth-gated (Clerk), deployed on Vercel
+- Owner-only writes (Clerk + `OWNER_USER_ID`), public read-only viewing, deployed on Vercel
 
 **Explicitly out of scope (deferred):**
 - Freeform tags/collections (a fixed 6-value tag list is implemented instead — see §3)
-- Multi-user / team features, sharing, roles
+- Multi-user / team features, per-user galleries, guest generation, quotas
 - Automatic mask suggestions (e.g. segmentation)
 - Economy mode for the Edit/Reference flow (Generate only, for now)
 - Edit `n > 1`, LLM-based prompt rewriting, automatic QA of rendered text accuracy
@@ -40,7 +40,7 @@ A personal tool to generate, edit, and organize AI-generated images without the 
 | Package manager | pnpm | Avoids npm's optional-dependency bug on Windows that broke native builds (lightningcss/oxide) |
 | UI | shadcn/ui on Base UI, Tailwind v4 | Design system requested by user, monochrome/soft theme |
 | Fonts | Poppins (headings), Inter (body) | Matches extracted design tokens |
-| Auth | Clerk (`@clerk/nextjs`) | Gate the whole app behind sign-in before public deploy |
+| Auth | Clerk (`@clerk/nextjs`) | Identifies the owner; viewers need no account |
 | Database | Neon Postgres + Drizzle ORM | Image metadata; provisioned via Vercel Marketplace |
 | File storage | Vercel Blob (public access) | Generated image binaries |
 | AI provider | OpenAI Images API (`openai` SDK) | `gpt-image-2.5-flare` (generate), `gpt-image-2.5-sunburst` (edit/inpaint) |
@@ -102,7 +102,7 @@ Deliberately separate from `images`: a batch job has its own lifecycle spanning 
 | `created_at` | timestamptz, not null, default now | |
 | `updated_at` | timestamptz, not null, default now | |
 
-No separate `users` table — auth/identity is entirely delegated to Clerk; the app has no concept of per-user rows since it's single-account.
+No separate `users` table — auth/identity is entirely delegated to Clerk; the app has no concept of per-user rows since it's single-owner.
 
 ## 4. Application Structure
 
@@ -111,8 +111,8 @@ src/
   app/
     page.tsx                    Main UI: header, GeneratePanel, Gallery
     layout.tsx                  Fonts, ClerkProvider, ThemeProvider, Toaster
-    sign-in/[[...sign-in]]/     Clerk sign-in page
-    sign-up/[[...sign-up]]/     Clerk sign-up page
+    sign-in/[[...sign-in]]/     Clerk sign-in page (owner only; sign-up link hidden, no sign-up route)
+    robots.ts                   Disallow all crawlers (view-only beta is shared by link)
     api/
       generate/route.ts         POST — text-to-image, SSE streaming (n=1) or non-streaming batch-of-N (n>1)
       edit/route.ts              POST — image edit + mask, multipart form
@@ -122,7 +122,7 @@ src/
       storage-usage/route.ts     GET — total Blob bytes + count
       batch/generate/route.ts    POST — submit an Economy-mode batch job to OpenAI's Batch API
       batch/route.ts             GET — list non-terminal batch_jobs (for gallery pending tiles)
-      batch/poll/route.ts        POST — client-triggered check-and-ingest (Clerk-protected)
+      batch/poll/route.ts        POST — client-triggered check-and-ingest (owner-only)
       batch/cron/route.ts        GET — cron target (Cloudflare Worker + Vercel Cron), check-and-ingest (CRON_SECRET-protected, public route)
   components/
     generate-panel.tsx          Presets, prompt + exact text, settings (size/tier/quality/format/compression/background), Economy/Compare/Live-preview toggles, change-only + preserve chips, submit
@@ -153,7 +153,7 @@ src/
     types.ts                    Shared TS types (ImageRecord, BatchJobRecord, stream events)
   db/
     schema.ts, index.ts         Drizzle schema (images, batch_jobs) + lazy DB client
-  proxy.ts                      Clerk middleware — gates all routes except /sign-in, /sign-up, /api/batch/cron
+  proxy.ts                      Clerk middleware — attaches auth state only; no route gating
 vercel.json                     Vercel Cron config (hits /api/batch/cron daily at 00:00 UTC)
 ```
 
@@ -211,14 +211,20 @@ Numbers come from `src/docs/gpt-image-2.5-pricing-reference.md` (official GPT Im
 
 ## 7. Auth & Access Control
 
-- Clerk auth is enforced per resource, not in middleware (`createRouteMatcher` is deprecated): `src/proxy.ts` only runs `clerkMiddleware()`; `src/app/page.tsx` calls `auth.protect()` and every API route handler calls `requireUser()` (`src/lib/require-user.ts`) except `/api/batch/cron`. Any new page or route must add its own check. The cron route is the one deliberate exception: cron invocations carry no Clerk session, so it authenticates itself via a `CRON_SECRET` bearer token instead (checked inside the route handler, fails closed with 500 if `CRON_SECRET` isn't set).
+- **Owner vs viewers.** The owner is the Clerk user whose id equals `OWNER_USER_ID`; everyone else, signed in or not, is a read-only viewer. Unset `OWNER_USER_ID` means nobody is the owner (fails closed).
+- Enforced per resource, not in middleware: `src/proxy.ts` only runs `clerkMiddleware()`. The page and read routes (`GET /api/images`, `/api/storage-usage`, `/api/cost-stats`, `/api/batch`) are public. Every write/spend route (generate, edit, batch generate, batch poll, image PATCH/DELETE) calls `requireOwner()` (`src/lib/require-owner.ts`) and returns 403 otherwise. Any new write route must add that check. `isOwner()` calls `auth()` before anything else so the home page stays dynamic (it would otherwise be prerendered as "not owner").
+- UI: `page.tsx` passes `readOnly` to `Home`, which provides it via `ReadOnlyProvider` (`src/lib/read-only.tsx`). Viewers get a banner, the generate panel inside a disabled `<fieldset>`, no favorite/tag/delete/refine/reference/use-as-prompt actions, no `UserButton`, and no client batch-poll POST. This is cosmetic; the server check is the enforcement.
+- Sign-ups are off: no `/sign-up` route, the sign-in page hides Clerk's "Sign up" footer link, and sign-ups should be restricted in the Clerk dashboard. The owner signs in at `/sign-in` directly.
+- `noindex` via `metadata.robots` in `layout.tsx` plus `robots.ts`.
+- A Feedback button (header) links to `NEXT_PUBLIC_FEEDBACK_URL` (a Google Form); hidden when unset.
+- `/api/batch/cron` is the one route outside this scheme: cron invocations carry no Clerk session, so it authenticates itself via a `CRON_SECRET` bearer token instead (checked inside the route handler, fails closed with 500 if `CRON_SECRET` isn't set).
 - No role/permission model — single account, full access once signed in.
 - **Staying on Clerk development keys for now, by user decision** (usage-limited, shows a "Development mode" badge). Production keys would require running Clerk's interactive domain-setup wizard (`clerk deploy`) by hand — not automatable from an agent session. Revisit if/when usage limits become a problem.
 
 ## 8. Deployment
 
 - Vercel project `image-generator` (team `dcatcherexgmailcoms-projects`), Git-connected to `github.com/dcatcherex/image_generator`. Pushes to `master` auto-deploy to Production.
-- Env vars (Production/Preview/Development, set via `vercel env add`): `DATABASE_URL`(+`_UNPOOLED`), `BLOB_READ_WRITE_TOKEN`, `OPENAI_API_KEY`, `CLERK_SECRET_KEY`, `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, plus Clerk's sign-in/up redirect URL vars, and `CRON_SECRET` (also stored as a secret on the Cloudflare Worker — keep both in sync; see PLAN.md §10).
+- Env vars (Production/Preview/Development, set via `vercel env add`): `DATABASE_URL`(+`_UNPOOLED`), `BLOB_READ_WRITE_TOKEN`, `OPENAI_API_KEY`, `CLERK_SECRET_KEY`, `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, plus Clerk's sign-in/up redirect URL vars, `OWNER_USER_ID` (owner's Clerk user id), `NEXT_PUBLIC_FEEDBACK_URL` (optional), and `CRON_SECRET` (also stored as a secret on the Cloudflare Worker — keep both in sync; see PLAN.md §10).
 - `vercel.json` configures a Vercel Cron job hitting `/api/batch/cron` once a day (00:00 UTC). The Hobby plan only allows daily crons and **rejects deployments** with a more frequent schedule; on Pro+ this can go back to `*/15 * * * *`.
 - Cloudflare Worker `image-generator-cron` (dashboard-managed, not in this repo) has a Cron Trigger `*/15 * * * *` that `fetch`es `/api/batch/cron` with `Authorization: Bearer $CRON_SECRET` — this is the primary 15-min backstop on Hobby.
 - Local dev: `pnpm dev` (Turbopack — works fine under pnpm's strict `node_modules`; explicitly broke under npm's flat layout, hence the pnpm migration).
