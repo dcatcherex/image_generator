@@ -15,6 +15,12 @@ A personal tool to generate, edit, and organize AI-generated images without the 
 - Mask-based inpainting (edit only a painted region of a single reference image)
 - Gallery with prompt search, favorites, fixed-tag filter, storage usage, delete
 - Batch generation (`n` = 1/2/4 per instant request — see §5.1)
+- Actual cost + latency recorded per image from the response `usage`; estimates calibrate from those actuals (see §6)
+- Size tiers (1K/2K/4K-experimental) combined with the aspect-ratio picker (see §5.1)
+- Transparency guard, `output_compression`, server-side alpha check (see §5.1)
+- "Compare models" — Flare and Sunburst side by side (see §5.6)
+- Edit workflow: reference roles, change-only/preserve constraints, Refine loop with a versions strip, mask compositing (see §5.2)
+- Prompt authoring: presets and an exact-text input, assembled by `buildPrompt()` (see §5.7)
 - "Economy mode" — real OpenAI Batch API submission for ~50% cheaper, async (up to 24h) generation, as a separate opt-in path (see §5.5)
 - Auth-gated (Clerk), deployed on Vercel
 
@@ -23,6 +29,7 @@ A personal tool to generate, edit, and organize AI-generated images without the 
 - Multi-user / team features, sharing, roles
 - Automatic mask suggestions (e.g. segmentation)
 - Economy mode for the Edit/Reference flow (Generate only, for now)
+- Edit `n > 1`, LLM-based prompt rewriting, automatic QA of rendered text accuracy
 - Cancelling a submitted Economy-mode batch from the UI
 
 ## 2. Tech Stack
@@ -37,11 +44,12 @@ A personal tool to generate, edit, and organize AI-generated images without the 
 | Database | Neon Postgres + Drizzle ORM | Image metadata; provisioned via Vercel Marketplace |
 | File storage | Vercel Blob (public access) | Generated image binaries |
 | AI provider | OpenAI Images API (`openai` SDK) | `gpt-image-2.5-flare` (generate), `gpt-image-2.5-sunburst` (edit/inpaint) |
+| Image processing | `sharp` (Node runtime) | Alpha check on transparent outputs, server-side mask compositing |
 | Hosting | Vercel | Git-connected; pushes to `master` auto-deploy to production |
 
 ## 3. Data Model
 
-Two tables (Drizzle schema in `src/db/schema.ts`):
+Two tables (Drizzle schema in `src/db/schema.ts`). Every row→client mapping goes through `rowToImageRecord()` in `src/lib/image-record.ts`.
 
 ### `images`
 
@@ -51,7 +59,7 @@ Two tables (Drizzle schema in `src/db/schema.ts`):
 | `prompt` | text, not null | User's prompt |
 | `revised_prompt` | text, nullable | OpenAI's rewritten prompt, if any |
 | `model` | text, not null | e.g. `gpt-image-2.5-flare` |
-| `size` | text, not null | e.g. `1024x1024` |
+| `size` | text, not null | The **actual returned dimensions** when the API reports them (`auto` returns non-multiple-of-16 sizes like `1254x1254`); for edits with a mask, the original's dimensions |
 | `quality` | text, not null | `low` / `medium` / `high` / `xhigh` / `max` / `auto` |
 | `format` | text, not null, default `png` | `png` / `jpeg` / `webp` |
 | `background` | text, not null, default `auto` | `auto` / `transparent` / `opaque` |
@@ -62,6 +70,17 @@ Two tables (Drizzle schema in `src/db/schema.ts`):
 | `source_type` | text, not null | `"generate"` \| `"edit"` |
 | `reference_image_ids` | jsonb string[], default `[]` | Gallery images used as references for an edit |
 | `cost_estimate` | numeric(10,4), nullable | Estimated USD cost at generation time (see §6) |
+| `actual_cost` | numeric(10,4), nullable | USD computed from `usage` (`actualCostFromUsage`); Batch rows use the 50% multiplier |
+| `requested_size` | text, nullable | What the user asked for (`auto` or `WxH`); cost stats group by this |
+| `preview_partials` | integer, nullable | Streamed partial images requested (0 when live preview is off) |
+| `input_tokens` / `input_image_tokens` / `output_tokens` | integer, nullable | From `usage`; split evenly across images for `n > 1` |
+| `duration_ms` | integer, nullable | Server-measured OpenAI request start → final image bytes. Never set for batch rows (which also keeps them out of cost stats) |
+| `output_compression` | integer, nullable | 0–100, JPEG/WebP only, only set if the user moved the slider |
+| `transparency_ok` | boolean, nullable | Only set when background = transparent: true if the decoded image has any non-opaque pixel |
+| `parent_image_id` | uuid, nullable | Refine chain; deliberately not a FK so deleting a parent doesn't cascade |
+| `prompt_inputs` | jsonb, nullable | `PromptInputs` (base, exactText, changeOnly, preserve, referenceRoles); `prompt` holds the assembled final text |
+| `reference_roles` | jsonb, nullable | `[{role, note?}]`, aligned with upload order / `reference_image_ids` |
+| `compare_group_id` | uuid, nullable | Shared by the two images of a model comparison |
 | `created_at` | timestamptz, not null, default now | |
 
 ### `batch_jobs` (Economy mode — see §5.5)
@@ -79,7 +98,7 @@ Deliberately separate from `images`: a batch job has its own lifecycle spanning 
 | `request_count` | integer, not null | How many images were requested in this batch |
 | `completed_count` | integer, not null, default 0 | |
 | `failed_count` | integer, not null, default 0 | |
-| `requests` | jsonb, not null, default `[]` | Array of `{customId, prompt, size, quality, format, background, model, tag}` — one entry per submitted `.jsonl` line, used to correlate OpenAI's `custom_id`-keyed results back to original params at ingestion time |
+| `requests` | jsonb, not null, default `[]` | Array of `{customId, prompt, size, quality, format, background, model, tag, compression?, promptInputs?}` — one entry per submitted `.jsonl` line, used to correlate OpenAI's `custom_id`-keyed results back to original params at ingestion time |
 | `created_at` | timestamptz, not null, default now | |
 | `updated_at` | timestamptz, not null, default now | |
 
@@ -98,6 +117,7 @@ src/
       generate/route.ts         POST — text-to-image, SSE streaming (n=1) or non-streaming batch-of-N (n>1)
       edit/route.ts              POST — image edit + mask, multipart form
       images/route.ts            GET — list images (search, favorites, tag filter)
+      cost-stats/route.ts        GET — median actual cost per model|quality|requested_size (instant rows only)
       images/[id]/route.ts       PATCH (favorite toggle, tag set) / DELETE
       storage-usage/route.ts     GET — total Blob bytes + count
       batch/generate/route.ts    POST — submit an Economy-mode batch job to OpenAI's Batch API
@@ -105,19 +125,28 @@ src/
       batch/poll/route.ts        POST — client-triggered check-and-ingest (Clerk-protected)
       batch/cron/route.ts        GET — cron target (Cloudflare Worker + Vercel Cron), check-and-ingest (CRON_SECRET-protected, public route)
   components/
-    generate-panel.tsx          Prompt input, settings, tabs (Generate/Edit), Economy mode toggle, submit
+    generate-panel.tsx          Presets, prompt + exact text, settings (size/tier/quality/format/compression/background), Economy/Compare/Live-preview toggles, change-only + preserve chips, submit
     mask-editor.tsx             Canvas-based inpainting mask painter (Dialog)
     gallery.tsx                 Grid, search, favorites/tag filters, storage usage, pending-batch tiles
-    image-card.tsx              Per-image tile: favorite/tag/download/delete/use-as-reference
+    image-card.tsx              Per-image tile: favorite/tag/download/delete/use-as-reference/refine, cost + duration, opaque-transparency badge
+    image-lightbox.tsx          Full-size view, metadata (cost/duration/tokens), versions strip
+    compare-dialog.tsx          Side-by-side result of a model comparison (keep both / keep one)
+    reference-images-picker.tsx Reference thumbnails; role select + note per image when there are 2+
     theme-provider.tsx / theme-toggle.tsx
     ui/                         shadcn/ui primitives (Base UI-backed)
   lib/
-    openai.ts                   OpenAI client, model/size/quality/n constants
-    pricing.ts                  Real per-image cost table (low/medium/high) + extrapolated xhigh/max, THB formatter (see §6)
+    openai.ts                   OpenAI client, model/quality/n constants, size tiers, validateSize(), format/compression validation
+    pricing.ts                  Official 2.5 output-token table, actualCostFromUsage, calibrated estimates, THB formatter (see §6)
+    prompt-builder.ts           PromptInputs types, buildPrompt(), sanitizePromptInputs() — all prompt wording lives here
+    prompt-presets.ts           Client-side preset library (generate + edit)
+    mask-composite.ts           sharp-based mask compositing for edits
+    version-chain.ts            Refine-chain lookup for the lightbox
+    image-record.ts             rowToImageRecord()
+    use-cost-stats.ts / use-live-preview.ts   Client hooks (calibration data; persisted preview toggle)
     tags.ts                     Fixed assignable-tag list + "All" filter sentinel
     batch.ts                    Economy-mode types, .jsonl builder, batch-output-line parser
     batch-poll.ts                checkAndIngestPendingBatches() — shared by the poll and cron routes
-    save-image.ts               Uploads to Blob + inserts DB row (shared by generate/edit/batch-ingestion)
+    save-image.ts               Uploads to Blob, runs the alpha check, inserts the DB row (shared by generate/edit/batch-ingestion)
     use-image-stream.ts         Client hook: SSE parsing for streaming generation
     sse.ts                      Server-side SSE event encoder
     reference-items.ts          Converts gallery images / disk files into edit-reference items
@@ -131,16 +160,18 @@ vercel.json                     Vercel Cron config (hits /api/batch/cron daily a
 ## 5. Core Flows
 
 ### 5.1 Generate (text-to-image)
-1. User types a prompt, sets size/quality/format/background/model/tag/n (1/2/4), clicks Generate.
+1. User types a prompt (optionally picks a preset and/or fills Exact text), sets aspect ratio + size tier/quality/format/compression/background/model/tag/n (1/2/4), clicks Generate. The size is `sizeFromAspectRatio(w, h, tier)` (tiers: 1K = 1536×1024 area, 2K = 2560×1440, 4K experimental = 3840×2160; edges floored to multiples of 16, ≤ 3840, ≤ 3:1); `validateSize()` re-checks it server-side in all generation routes. JPEG + transparent is rejected (400) and disabled in the UI; compression is only sent for JPEG/WebP once moved.
 2. Client (`useImageStream`) POSTs JSON to `/api/generate`.
-3. If `n === 1`: server calls `openai.images.generate({ ..., stream: true, partial_images: 2 })`, re-emits each partial as an SSE `partial` event, then on stream close uploads the final image to Blob, inserts a DB row, emits a `done` event with the full `ImageRecord`. Client shows the live partial preview as the **top-left tile of the gallery grid** (not in the side panel) while generating, then swaps it for the real saved image.
-4. If `n > 1`: server calls `openai.images.generate({ ..., n, stream: false })` (no live preview — OpenAI's streaming events don't disambiguate which image-of-a-batch a partial belongs to), then emits one synthetic `done` event per image as each is persisted, so the gallery fills in tiles progressively. Gallery shows `n` pulsing placeholder tiles that count down as each `done` arrives.
+3. The client sends `promptInputs`; the server builds the final prompt with `buildPrompt()`. If `n === 1`: server calls `openai.images.generate({ ..., stream: true, partial_images: preview ? 2 : 0 })`. **Live preview is a panel toggle, default off** — each partial bills image output tokens (observed ≈ 77 for two frames, so the 100-token-each figure is an upper bound). Partials are re-emitted as SSE `partial` events; the `image_generation.completed` event carries `usage`, `size` and stops the latency clock. The final image is uploaded to Blob, alpha-checked if transparent, and saved with actual cost/tokens/duration; a `done` event carries the `ImageRecord` (plus a `warning` if a transparent background came back opaque). With preview on the client shows partials as the top-left gallery tile; with it off, a pulsing placeholder.
+4. If `n > 1`: server calls `openai.images.generate({ ..., n, stream: false })` (no live preview — OpenAI's streaming events don't disambiguate which image-of-a-batch a partial belongs to), then emits one synthetic `done` event per image as each is persisted, so the gallery fills in tiles progressively. Response `usage` is split evenly across the images. Gallery shows `n` pulsing placeholder tiles that count down as each `done` arrives.
 
 ### 5.2 Edit (image-to-image)
 1. User switches to "Edit / Reference" tab, adds 1+ reference images (upload from disk, or "Use as reference" on any gallery tile).
 2. Optionally opens the mask editor (only offered when exactly one reference image is present — masks apply to a single base image).
-3. Submits: client POSTs `multipart/form-data` to `/api/edit` (prompt, settings, reference image files, optional mask file).
-4. Server calls `openai.images.edit({ image, mask?, ... })` (non-streaming), saves result the same way as generate.
+3. Each reference gets a role (Subject / Style / Clothing or item / Scene or background / Other) and optional note once there are 2+ images (default: first = subject, rest = other). Edit mode also shows a "Change only…" input and preserve chips. All of this travels as `promptInputs` and is assembled into an "Inputs / Change only / Constraints" prompt by `buildPrompt()`.
+4. Submits: client POSTs `multipart/form-data` to `/api/edit` (`promptInputs` JSON, settings, reference image files, optional mask file and `compositeMask`, optional `parentImageId`). Server calls `openai.images.edit({ image, mask?, ... })` (non-streaming), records usage/duration, saves like generate.
+5. **Mask compositing** (on by default; "Keep unmasked area pixel-identical" checkbox): `compositeMaskedEdit()` (sharp) pastes the edited region back onto the original using the mask (transparent = edit) with an inward-only ~2px feather, so protected pixels stay byte-identical (exact for PNG; JPEG/WebP re-encode). The composite's dimensions are stored as `size`. If compositing fails, the raw model output is saved with a warning.
+6. **Refine** (wand action on a card/lightbox): replaces the references with that one image, carries its change-only/preserve constraints forward, clears the prompt and records it as `parent_image_id` for the next edit. The lightbox shows a Versions strip built from the parent chain.
 
 ### 5.3 Mask-based inpainting
 - `mask-editor.tsx` renders the reference image under a fully opaque white `<canvas>` overlay.
@@ -162,9 +193,21 @@ vercel.json                     Vercel Cron config (hits /api/batch/cron daily a
 4. While anything is pending, the client polls `POST /api/batch/poll` every 45s (responsiveness while a tab is open); a **Cloudflare Worker cron** hitting `GET /api/batch/cron` every 15 min (plus a daily Vercel Cron fallback) is the reliability backstop that keeps working even when nobody has the app open.
 5. Both poll routes call the same `checkAndIngestPendingBatches()` (`src/lib/batch-poll.ts`): retrieves the batch from OpenAI, updates status/counts, and — the first time it sees `status: "completed"` — fetches the output file, parses each line (correlating by `custom_id`, **not** line order, per OpenAI's own docs warning that output order isn't guaranteed), looks up the original request params, and calls the same `persistGeneratedImage()` the instant flow uses. The row then flips to our own `"ingested"` status so it's never re-processed. Once ingested, the resulting images just show up in the normal `/api/images` list and the placeholder tiles for that job naturally disappear (the job drops out of the non-terminal `GET /api/batch` list).
 
+### 5.6 Compare models
+Panel toggle (instant, n=1 only; hidden in edit/Economy/n>1). The client fires two `/api/generate` requests in parallel — identical except `model` — sharing a client-made `compareGroupId` (stored in `compare_group_id`), using two `useImageStream` instances. Both results open in `CompareDialog` (duration + actual cost per model); "Keep Flare"/"Keep Sunburst" deletes the other via `DELETE /api/images/[id]`.
+
+### 5.7 Prompt authoring
+`PromptInputs` → `buildPrompt()` (`src/lib/prompt-builder.ts`) is the single place prompt wording lives; the server is authoritative and a plain `prompt` string is still accepted (`{ base: prompt }`). Presets (`prompt-presets.ts`) only fill the plain textarea with a labelled-section scaffold and set recommended params/preserve chips. "Exact text" appends a verbatim-text instruction. "Use as prompt" restores `prompt_inputs.base`, exact text and (when recorded) the change-only/preserve state. Settings can hide each panel section (`use-panel-options.ts`).
+
 ## 6. Cost Estimation
 
-`src/lib/pricing.ts` provides a `[quality][size]` lookup table shown as a badge (in THB, via `formatCostThb()`) on the Generate/Apply-edit/Submit-batch button. `low`/`medium`/`high` rows are sourced from OpenAI's published GPT Image 2 per-image pricing (the closest real numbers available — GPT Image 2.5, which this app actually uses, is priced token-based with no published per-image dollar figures). `xhigh`/`max` are extrapolated guesses (clearly commented as such in the file, not sourced) since those tiers have no published numbers for either model. `auto` quality falls back to the `medium` row. Economy mode multiplies the result by 0.5 (OpenAI's real Batch API discount). If actual OpenAI billing drifts noticeably from what's shown, update the constants in that file.
+Numbers come from `src/docs/gpt-image-2.5-pricing-reference.md` (official GPT Image 2.5 token table and rates; the Batch discount is verified at exactly 50% from billing).
+
+- **Actual cost**: `actualCostFromUsage(usage, {batch})` = text-in × $5/M + image-in × $8/M + image-out × $30/M (× `BATCH_PRICE_MULTIPLIER` = 0.5 for batch). Recorded per image from the streamed completed event, the non-streaming response, or batch output lines; a missing `usage` is tolerated (columns stay null).
+- **Estimate**: `estimateCost(quality, size, {partials, promptChars})` = table output tokens × $30/M + preview partials × 100 tokens × $30/M + ⌈chars/4⌉ × $5/M. Sizes not in the table use the documented size with the nearest area and same orientation (no megapixel scaling); `auto` size/quality fall back to 1024×1024 / medium. Table-based values show a `~`.
+- **Calibration**: `GET /api/cost-stats` returns the median `actual_cost` per `model|quality|requested_size` over instant rows (`actual_cost` and `duration_ms` set). The panel uses it instead of the table once a combo has ≥ 3 rows, and refetches after each generation. Economy mode multiplies by 0.5.
+- THB display uses a fixed 33 THB/USD (`formatCostThb`), an app assumption.
+- Cards/lightbox show the actual cost (or the stored estimate with `~`), plus duration and tokens in the lightbox.
 
 ## 7. Auth & Access Control
 
@@ -184,9 +227,12 @@ vercel.json                     Vercel Cron config (hits /api/batch/cron daily a
 ## 9. Known Gaps / Follow-ups
 
 - Clerk still on development keys — by user decision, not currently planned (§7).
-- Cost estimates for `xhigh`/`max` quality tiers are extrapolated guesses, not sourced (§6); low/medium/high are real published numbers as of this session.
+- `actual_cost` is `numeric(10,4)`, so low-quality images round by up to ~1%; widen the scale if that matters.
+- The 2048×2048 rows of the official token table price above 3840×2160 (recheck in the calculator before trusting estimates there). 4K generation time vs `maxDuration = 300` is untested.
+- `sharp` on the Vercel production build hasn't been confirmed (only run locally).
+- Not yet exercised with real OpenAI calls: an edit's stored `prompt`/`prompt_inputs`/`parent_image_id`, the masked-edit route wiring, and `compare_group_id` storage (verified by mocks and unit-style scripts only).
 - No automated mask suggestions (§1).
 - Economy mode not wired up for the Edit/Reference flow, and has no cancel-a-batch UI (§1, §5.5).
 - Economy mode's ingestion path (`src/lib/batch-poll.ts`) has been verified by code review against the OpenAI SDK's TypeScript definitions, but **not by a real batch actually completing end-to-end** — that takes real time and money and wasn't exercised live. Sanity-test with one small real batch before relying on it.
-- No tests (manual browser verification only, done ad hoc per feature).
+- No test runner (browser verification with a mocked `window.fetch`, plus throwaway scratchpad scripts for `buildPrompt`, size tiers, pricing and mask compositing).
 - Mobile/narrow-viewport layout has had one pass (mask editor overflow fix, gallery-primary mobile stacking) but hasn't been verified on a real narrow device/emulator this session — see PLAN.md §5.

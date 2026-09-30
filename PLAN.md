@@ -2,7 +2,7 @@
 
 This is a handoff doc for continuing work on this project in a fresh chat session. Read `SPEC.md` first for full context (architecture, data model, flows) — this doc is only the **outstanding work**, broken into discrete, independently-startable tasks.
 
-> **Active work:** GPT Image 2.5 enhancements (cost/latency tracking, 2K/4K, transparency, model compare, edit workflow, presets) are specified and phased in `ENHANCEMENTS.md`. Cost-estimate work there supersedes task 2 below.
+> **GPT Image 2.5 enhancements — DONE** (phases 0–12 of `ENHANCEMENTS.md`, one commit per phase on `master`): actual cost/latency tracking with calibrated estimates, optional live preview, size tiers, transparency guard + compression, model comparison, reference roles, change-only/preserve, Refine + versions, mask compositing, presets and exact text. `SPEC.md` reflects the result; open verification items are listed in its §9. This supersedes task 2 below.
 
 **Live**: https://image-generator-ruddy-one.vercel.app
 **Repo**: https://github.com/dcatcherex/image_generator (branch `master`, auto-deploys to Vercel production on push)
@@ -51,7 +51,9 @@ Do these roughly in order — later tasks assume auth/deploy is solid, but each 
 
 ---
 
-### 2. Verify/correct the cost-estimate numbers
+### 2. Verify/correct the cost-estimate numbers — SUPERSEDED
+
+**Done via `ENHANCEMENTS.md`**: `pricing.ts` now uses the official 2.5 token table, records actual cost from `usage`, and calibrates from real rows. The text below is the original (obsolete) task.
 
 **Why it matters**: `src/lib/pricing.ts` has placeholder numbers (not sourced from a real OpenAI pricing API — none exists for this). They're shown to the user as a cost badge before every generation.
 
@@ -156,4 +158,8 @@ Do these roughly in order — later tasks assume auth/deploy is solid, but each 
 - **Ref callbacks defined inline (a new function every render) cause React to detach/reattach on every render** — if the ref callback does anything with side effects (like our canvas init), this causes an infinite loop (`Maximum update depth exceeded`). Always wrap ref callbacks in `useCallback`.
 - **`<img onLoad>` doesn't fire for already-cached images** — several gallery images share blob URLs across components, so `onLoad` alone is unreliable; check `img.complete` in a ref callback as a fallback (see `mask-editor.tsx`'s `attachImgRef`).
 - **OpenAI dev-mode Clerk + a non-localhost domain**: `curl` against the deployed app can return a misleading 404 with `X-Clerk-Auth-Reason: dev-browser-missing` — that's Clerk's dev-instance cross-domain handshake needing real browser JS, not a real bug. Verify with an actual browser, not curl, when debugging Clerk-gated routes on preview/production URLs.
+- **Base UI `Select`**: `SelectValue` renders the raw value (use the label as the value when it must be readable), and `value={null}` gives an always-unselected control (used by the Presets dropdown).
+- **sharp single-channel output**: `.raw()` on a blurred 1-channel image comes back as 3-channel sRGB; call `.extractChannel(0)` (see `mask-composite.ts`).
+- **Panel visibility is user-persisted** (`panel-options-visibility` in localStorage) — an app can look like it is "missing" size/quality/format controls when they were simply hidden in Settings. Back up and restore it when testing.
+- **Streamed `usage` includes preview frames** (196 vs 273 output tokens at `low` 1024² without/with 2 partials), so `actual_cost` on preview-on rows is already complete.
 - **Real API costs**: `/api/generate` and `/api/edit` call the live OpenAI API — no sandbox/test mode exists for this endpoint. When testing UI behavior only, mock `window.fetch` in the browser console/tool rather than submitting real prompts.
