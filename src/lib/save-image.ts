@@ -49,7 +49,10 @@ export async function persistGeneratedImage(params: {
   });
 
   const db = getDb();
-  const cost = estimateCost(params.quality, params.requestedSize ?? params.size).toString();
+  const cost = estimateCost(params.quality, params.requestedSize ?? params.size, {
+    partials: params.previewPartials ?? 0,
+    promptChars: params.prompt.length,
+  }).usd.toString();
 
   const [row] = await db
     .insert(images)

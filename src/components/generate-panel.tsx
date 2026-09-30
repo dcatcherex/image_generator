@@ -29,9 +29,10 @@ import {
 import {
   BATCH_PRICE_MULTIPLIER,
   previewCostUsd,
-  estimateCost,
+  estimateCostCalibrated,
   formatCostThb,
 } from "@/lib/pricing";
+import { useCostStats } from "@/lib/use-cost-stats";
 import { useLivePreview } from "@/lib/use-live-preview";
 import { ASSIGNABLE_TAGS } from "@/lib/tags";
 import type { useImageStream } from "@/lib/use-image-stream";
@@ -118,6 +119,7 @@ export function GeneratePanel({
 
   const { generate, isGenerating, error } = generateStream;
   const livePreview = useLivePreview();
+  const costStats = useCostStats();
 
   const isEditMode = referenceItems.length > 0;
   // Only the instant single-image generate path streams; edits, batches (n > 1) and Economy
@@ -131,19 +133,37 @@ export function GeneratePanel({
     return selected?.ratio ? sizeFromAspectRatio(selected.ratio[0], selected.ratio[1]) : "auto";
   }, [aspectRatio]);
 
-  const draftCost = useMemo(() => {
-    const base = estimateCost(quality, size, { partials }) * (isEditMode ? 1 : n);
-    return !isEditMode && economyMode ? base * BATCH_PRICE_MULTIPLIER : base;
-  }, [quality, size, partials, isEditMode, n, economyMode]);
+  const draft = useMemo(() => {
+    const one = estimateCostCalibrated(costStats.stats, model, quality, size, {
+      partials,
+      promptChars: prompt.length,
+    });
+    const count = isEditMode ? 1 : n;
+    const mult = !isEditMode && economyMode ? BATCH_PRICE_MULTIPLIER : 1;
+    return { usd: one.usd * count * mult, approximate: one.approximate };
+  }, [costStats.stats, model, quality, size, partials, prompt.length, isEditMode, n, economyMode]);
 
   // Queued items are only submitted (and thus only priced) in Economy mode, so no
-  // separate "instant" branch is needed here the way draftCost has one.
+  // separate "instant" branch is needed here the way the draft has one.
   const queueCost = useMemo(() => {
-    if (isEditMode || !economyMode) return 0;
-    return queue.reduce((sum, item) => sum + estimateCost(item.quality, item.size) * item.n * BATCH_PRICE_MULTIPLIER, 0);
-  }, [queue, isEditMode, economyMode]);
+    if (isEditMode || !economyMode) return { usd: 0, approximate: false };
+    return queue.reduce(
+      (acc, item) => {
+        const one = estimateCostCalibrated(costStats.stats, item.model, item.quality, item.size, {
+          promptChars: item.prompt.length,
+        });
+        return {
+          usd: acc.usd + one.usd * item.n * BATCH_PRICE_MULTIPLIER,
+          approximate: acc.approximate || one.approximate,
+        };
+      },
+      { usd: 0, approximate: false }
+    );
+  }, [costStats.stats, queue, isEditMode, economyMode]);
 
-  const cost = draftCost + queueCost;
+  const cost = draft.usd + queueCost.usd;
+  // "~" only in front of table-based values; calibrated medians are real recorded costs.
+  const costIsApproximate = draft.approximate || queueCost.approximate;
 
   const queuedImageCount = queue.reduce((sum, item) => sum + item.n, 0) + (!isEditMode && economyMode && prompt.trim() ? n : 0);
 
@@ -221,6 +241,7 @@ export function GeneratePanel({
           created++;
         }
       );
+      costStats.refresh();
       if (error) {
         toast.error(error);
       } else if (created > 0) {
@@ -250,6 +271,7 @@ export function GeneratePanel({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Edit failed");
       onImageCreated(data.image);
+      costStats.refresh();
       toast.success("Image edited");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Edit failed");
@@ -518,7 +540,7 @@ export function GeneratePanel({
             variant="outline"
             className="font-mono text-[10px] border-primary-foreground/30 text-primary-foreground"
           >
-            ~{formatCostThb(cost)}
+            {costIsApproximate ? "~" : ""}{formatCostThb(cost)}
           </Badge>
         </Button>
       </div>

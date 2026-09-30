@@ -1,55 +1,77 @@
-// Per-image cost estimates in USD, shown to the user before they generate.
-//
-// Sourced from OpenAI's published per-image pricing table for GPT Image 2 (the closest
-// documented real numbers we have) at our three supported sizes. GPT Image 2.5 (the model
-// this app actually uses, `gpt-image-2.5-flare`/`gpt-image-2.5-sunburst`) is priced purely
-// token-based in OpenAI's docs ($8/M image input tokens, $2/M cached image input tokens,
-// $30/M image output tokens, $5/M text input tokens, $1.25/M cached text input tokens) with
-// no published per-image dollar figures or token-count-per-image numbers for its quality
-// tiers, so an exact 2.5 table isn't derivable from public docs. We use the GPT Image 2
-// table as the best available real-cost proxy for low/medium/high.
-//
-// `xhigh` and `max` are new to 2.5 and have no published numbers anywhere (for either
-// model) — those two rows are EXTRAPOLATED GUESSES (xhigh ≈ 1.55x high, max ≈ 2.2x high),
-// not sourced figures. Re-check against actual OpenAI billing once you have real charges at
-// those tiers and adjust.
-const COST_TABLE: Record<string, Record<string, number>> = {
-  low: {
-    "1024x1024": 0.006,
-    "1024x1536": 0.005,
-    "1536x1024": 0.005,
-  },
-  medium: {
-    "1024x1024": 0.053,
-    "1024x1536": 0.041,
-    "1536x1024": 0.041,
-  },
-  high: {
-    "1024x1024": 0.211,
-    "1024x1536": 0.165,
-    "1536x1024": 0.165,
-  },
-  // Extrapolated (~1.55x high) — no published source, see note above.
-  xhigh: {
-    "1024x1024": 0.327,
-    "1024x1536": 0.256,
-    "1536x1024": 0.256,
-  },
-  // Extrapolated (~2.2x high) — no published source, see note above.
-  max: {
-    "1024x1024": 0.464,
-    "1024x1536": 0.363,
-    "1536x1024": 0.363,
-  },
+// Pre-generation cost estimates. Source of truth for every number here is
+// src/docs/gpt-image-2.5-pricing-reference.md: the official GPT Image 2.5 output-token
+// table (image output = tokens x $30/M), plus rough prompt-text and preview-frame terms.
+// Once real rows exist, /api/cost-stats medians replace these table values (see the panel).
+const QUALITIES = ["low", "medium", "high", "xhigh", "max"] as const;
+
+// Output tokens per quality, in QUALITIES order, for every size the official calculator lists.
+const OUTPUT_TOKENS: Record<string, readonly number[]> = {
+  "1024x1024": [196, 439, 1756, 3122, 7024],
+  "1024x1536": [158, 343, 1372, 2459, 5488],
+  "1536x1024": [158, 343, 1372, 2459, 5488],
+  "1536x864": [120, 280, 1078, 1917, 4312],
+  "2048x1152": [157, 367, 1413, 2511, 5650],
+  "2560x1440": [205, 478, 1843, 3276, 7370],
+  "2048x2048": [397, 892, 3568, 6343, 14272],
+  "3840x2160": [371, 865, 3336, 5930, 13342],
+  "2160x3840": [371, 865, 3336, 5930, 13342],
+};
+// Sizes only listed in one orientation are mirrored (same token count).
+for (const key of Object.keys(OUTPUT_TOKENS)) {
+  const [w, h] = key.split("x");
+  OUTPUT_TOKENS[`${h}x${w}`] ??= OUTPUT_TOKENS[key];
+}
+
+function parseWxH(size: string): [number, number] | null {
+  const m = /^(\d+)x(\d+)$/.exec(size);
+  return m ? [Number(m[1]), Number(m[2])] : null;
+}
+
+// Sizes not in the table use the documented size with the nearest pixel area *and the same
+// orientation*. We deliberately don't scale by megapixels: the official table isn't linear
+// (2048x2048 costs more than 3840x2160).
+function nearestDocumentedSize(w: number, h: number): string {
+  const orientation = Math.sign(w - h);
+  const area = w * h;
+  let best = "1024x1024";
+  let bestDistance = Infinity;
+  for (const key of Object.keys(OUTPUT_TOKENS)) {
+    const [kw, kh] = parseWxH(key)!;
+    if (Math.sign(kw - kh) !== orientation) continue;
+    const distance = Math.abs(Math.log((kw * kh) / area));
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      best = key;
+    }
+  }
+  return best;
+}
+
+export type CostEstimate = {
+  usd: number;
+  /** True when the size or quality wasn't an exact table row (auto, or a computed aspect-ratio size). */
+  approximate: boolean;
 };
 
-export function estimateCost(quality: string, size: string, { partials = 0 }: { partials?: number } = {}): number {
-  // "auto" has no fixed quality tier — OpenAI picks one at generation time — so we fall
-  // back to the medium row as a reasonable midpoint estimate, matching prior behavior.
-  const row = COST_TABLE[quality] ?? COST_TABLE.medium;
-  const cost = row[size] ?? row["1024x1024"];
-  // Streamed preview frames bill 100 output tokens each (see PARTIAL_IMAGE_TOKENS below).
-  return Math.round((cost + previewCostUsd(partials)) * 10000) / 10000;
+export function estimateCost(
+  quality: string,
+  size: string,
+  { partials = 0, promptChars = 0 }: { partials?: number; promptChars?: number } = {}
+): CostEstimate {
+  // "auto" quality/size have no fixed row — OpenAI picks at generation time — so fall back
+  // to medium / 1024x1024 and flag the result as approximate.
+  const qualityIndex = QUALITIES.indexOf(quality as (typeof QUALITIES)[number]);
+  const dims = parseWxH(size);
+  const sizeKey = !dims ? "1024x1024" : OUTPUT_TOKENS[size] ? size : nearestDocumentedSize(dims[0], dims[1]);
+  const outputTokens = OUTPUT_TOKENS[sizeKey][qualityIndex === -1 ? 1 : qualityIndex];
+  const textTokens = Math.ceil(promptChars / 4);
+  const usd =
+    (outputTokens * IMAGE_OUTPUT_USD_PER_M + textTokens * TEXT_INPUT_USD_PER_M) / 1_000_000 +
+    previewCostUsd(partials);
+  return {
+    usd: Math.round(usd * 10000) / 10000,
+    approximate: qualityIndex === -1 || sizeKey !== size,
+  };
 }
 
 // Approximate, manually-set USD→THB rate (not live-fetched — update this constant
@@ -143,4 +165,27 @@ export function formatDuration(ms: number): string {
 /** USD billed for streaming `partials` preview frames. */
 export function previewCostUsd(partials: number): number {
   return (partials * PARTIAL_IMAGE_TOKENS * IMAGE_OUTPUT_USD_PER_M) / 1_000_000;
+}
+
+/** Median actual cost per "model|quality|requested_size" from GET /api/cost-stats. */
+export type CostStats = Record<string, { median: number; count: number }>;
+
+/** Minimum recorded rows before a median replaces the table estimate. */
+export const CALIBRATION_MIN_COUNT = 3;
+
+export function costStatsKey(model: string, quality: string, requestedSize: string): string {
+  return `${model}|${quality}|${requestedSize}`;
+}
+
+/** Table estimate, replaced by the recorded median when there are enough real rows. */
+export function estimateCostCalibrated(
+  stats: CostStats | null,
+  model: string,
+  quality: string,
+  size: string,
+  opts: { partials?: number; promptChars?: number } = {}
+): CostEstimate {
+  const entry = stats?.[costStatsKey(model, quality, size)];
+  if (entry && entry.count >= CALIBRATION_MIN_COUNT) return { usd: entry.median, approximate: false };
+  return estimateCost(quality, size, opts);
 }
