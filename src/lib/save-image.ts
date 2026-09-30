@@ -3,6 +3,8 @@ import { randomUUID } from "crypto";
 import { getDb } from "@/db";
 import { images } from "@/db/schema";
 import { estimateCost } from "./pricing";
+import { rowToImageRecord } from "./image-record";
+import type { PromptInputs, ReferenceRole } from "./prompt-builder";
 import type { ImageRecord } from "./types";
 
 function contentTypeFor(format: string) {
@@ -23,6 +25,20 @@ export async function persistGeneratedImage(params: {
   sourceType: "generate" | "edit";
   referenceImageIds?: string[];
   tag?: string | null;
+  // Measurement + edit-workflow fields (all optional; see the `images` table comments).
+  requestedSize?: string | null;
+  previewPartials?: number | null;
+  actualCost?: number | null;
+  inputTokens?: number | null;
+  inputImageTokens?: number | null;
+  outputTokens?: number | null;
+  durationMs?: number | null;
+  outputCompression?: number | null;
+  transparencyOk?: boolean | null;
+  parentImageId?: string | null;
+  promptInputs?: PromptInputs | null;
+  referenceRoles?: Array<{ role: ReferenceRole; note?: string }> | null;
+  compareGroupId?: string | null;
 }): Promise<ImageRecord> {
   const buffer = Buffer.from(params.b64, "base64");
   const pathname = `images/${randomUUID()}.${params.format}`;
@@ -51,25 +67,21 @@ export async function persistGeneratedImage(params: {
       referenceImageIds: params.referenceImageIds ?? [],
       costEstimate: cost,
       tag: params.tag ?? null,
+      actualCost: params.actualCost != null ? params.actualCost.toString() : null,
+      requestedSize: params.requestedSize ?? null,
+      previewPartials: params.previewPartials ?? null,
+      inputTokens: params.inputTokens ?? null,
+      inputImageTokens: params.inputImageTokens ?? null,
+      outputTokens: params.outputTokens ?? null,
+      durationMs: params.durationMs ?? null,
+      outputCompression: params.outputCompression ?? null,
+      transparencyOk: params.transparencyOk ?? null,
+      parentImageId: params.parentImageId ?? null,
+      promptInputs: params.promptInputs ?? null,
+      referenceRoles: params.referenceRoles ?? null,
+      compareGroupId: params.compareGroupId ?? null,
     })
     .returning();
 
-  return {
-    id: row.id,
-    prompt: row.prompt,
-    revisedPrompt: row.revisedPrompt,
-    model: row.model,
-    size: row.size,
-    quality: row.quality,
-    format: row.format,
-    background: row.background,
-    blobUrl: row.blobUrl,
-    blobPathname: row.blobPathname,
-    favorite: row.favorite,
-    tag: row.tag,
-    sourceType: row.sourceType as "generate" | "edit",
-    referenceImageIds: row.referenceImageIds ?? [],
-    costEstimate: row.costEstimate,
-    createdAt: row.createdAt.toISOString(),
-  };
+  return rowToImageRecord(row);
 }

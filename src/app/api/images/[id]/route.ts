@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { del } from "@vercel/blob";
 import { getDb } from "@/db";
 import { images } from "@/db/schema";
+import { rowToImageRecord } from "@/lib/image-record";
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const denied = await requireUser();
@@ -29,7 +30,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   if (!row) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  return NextResponse.json({ image: { ...row, createdAt: row.createdAt.toISOString() } });
+  return NextResponse.json({ image: rowToImageRecord(row) });
 }
 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {

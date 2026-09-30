@@ -2,6 +2,8 @@
 // results within up to 24h, no guarantee of speed). This is a separate, opt-in path from
 // the normal instant `/api/generate` flow; it never touches that flow's code.
 
+import type { PromptInputs } from "./prompt-builder";
+
 export type BatchRequestMeta = {
   customId: string;
   prompt: string;
@@ -11,6 +13,9 @@ export type BatchRequestMeta = {
   background: string;
   model: string;
   tag: string | null;
+  // Optional for jobs submitted before these existed (stored in the batch_jobs.requests jsonb).
+  compression?: number | null;
+  promptInputs?: PromptInputs | null;
 };
 
 // Terminal statuses that mean "nothing left to do" for a batch row — either its images

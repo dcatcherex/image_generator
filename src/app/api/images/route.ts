@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { and, desc, eq, ilike } from "drizzle-orm";
 import { getDb } from "@/db";
 import { images } from "@/db/schema";
+import { rowToImageRecord } from "@/lib/image-record";
 
 export async function GET(req: NextRequest) {
   const denied = await requireUser();
@@ -27,9 +28,6 @@ export async function GET(req: NextRequest) {
     .limit(200);
 
   return NextResponse.json({
-    images: rows.map((row) => ({
-      ...row,
-      createdAt: row.createdAt.toISOString(),
-    })),
+    images: rows.map(rowToImageRecord),
   });
 }

@@ -1,5 +1,6 @@
 import { pgTable, uuid, text, boolean, timestamp, numeric, jsonb, integer } from "drizzle-orm/pg-core";
 import type { BatchRequestMeta } from "@/lib/batch";
+import type { PromptInputs, ReferenceRole } from "@/lib/prompt-builder";
 
 export const images = pgTable("images", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -19,6 +20,32 @@ export const images = pgTable("images", {
   sourceType: text("source_type").notNull(), // 'generate' | 'edit'
   referenceImageIds: jsonb("reference_image_ids").$type<string[]>().default([]),
   costEstimate: numeric("cost_estimate", { precision: 10, scale: 4 }),
+  // --- Measurement + edit-workflow columns (ENHANCEMENTS.md). All nullable so rows that
+  // predate them stay valid. ---
+  // USD computed from the response `usage` (see actualCostFromUsage in pricing.ts).
+  actualCost: numeric("actual_cost", { precision: 10, scale: 4 }),
+  // What the user asked for ("auto" or WxH). `size` above holds the *actual* returned
+  // dimensions when the API reports them (`auto` returns non-multiple-of-16 sizes), while
+  // cost stats group by this, since it's what's known before generating.
+  requestedSize: text("requested_size"),
+  // Streamed partial images requested (0 when live preview is off) — each bills 100 output
+  // tokens, so this is needed to reconcile cost.
+  previewPartials: integer("preview_partials"),
+  inputTokens: integer("input_tokens"),
+  inputImageTokens: integer("input_image_tokens"),
+  outputTokens: integer("output_tokens"),
+  // Server-measured OpenAI request start -> final image bytes (excludes Blob/DB time).
+  durationMs: integer("duration_ms"),
+  outputCompression: integer("output_compression"), // 0-100, JPEG/WebP only
+  // Only set when background=transparent: true if the decoded image has any non-opaque pixel.
+  transparencyOk: boolean("transparency_ok"),
+  // Refine chain. Deliberately not a FK: deleting a parent must not cascade.
+  parentImageId: uuid("parent_image_id"),
+  promptInputs: jsonb("prompt_inputs").$type<PromptInputs>(),
+  // Aligned with referenceImageIds / upload order.
+  referenceRoles: jsonb("reference_roles").$type<Array<{ role: ReferenceRole; note?: string }>>(),
+  // Shared by the two images of a model comparison.
+  compareGroupId: uuid("compare_group_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

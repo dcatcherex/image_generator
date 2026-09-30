@@ -1,3 +1,5 @@
+import type { PromptInputs, ReferenceRole } from "./prompt-builder";
+
 export type ImageRecord = {
   id: string;
   prompt: string;
@@ -14,6 +16,19 @@ export type ImageRecord = {
   sourceType: "generate" | "edit";
   referenceImageIds: string[];
   costEstimate: string | null;
+  actualCost: string | null;
+  requestedSize: string | null;
+  previewPartials: number | null;
+  inputTokens: number | null;
+  inputImageTokens: number | null;
+  outputTokens: number | null;
+  durationMs: number | null;
+  outputCompression: number | null;
+  transparencyOk: boolean | null;
+  parentImageId: string | null;
+  promptInputs: PromptInputs | null;
+  referenceRoles: Array<{ role: ReferenceRole; note?: string }> | null;
+  compareGroupId: string | null;
   createdAt: string;
 };
 
@@ -36,6 +51,8 @@ export type BatchJobRecord = {
     background: string;
     model: string;
     tag: string | null;
+    compression?: number | null;
+    promptInputs?: PromptInputs | null;
   }>;
   createdAt: string;
   updatedAt: string;
