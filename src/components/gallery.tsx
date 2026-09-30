@@ -25,6 +25,7 @@ export function Gallery({
   onImageUpdated,
   onUseAsReference,
   onUseAsPrompt,
+  onRefine,
   query,
   setQuery,
   favoritesOnly,
@@ -41,6 +42,7 @@ export function Gallery({
   onImageUpdated: (image: ImageRecord) => void;
   onUseAsReference: (image: ImageRecord) => void;
   onUseAsPrompt: (image: ImageRecord) => void;
+  onRefine: (image: ImageRecord) => void;
   query: string;
   setQuery: (q: string) => void;
   favoritesOnly: boolean;
@@ -136,6 +138,7 @@ export function Gallery({
         onDelete={onDelete}
         onImageUpdated={onImageUpdated}
         onUseAsReference={onUseAsReference}
+        onRefine={onRefine}
         onOpen={() => setLightboxIndex(filtered.findIndex((img) => img.id === item.image.id))}
         masonry={view === "masonry"}
       />
@@ -229,6 +232,7 @@ export function Gallery({
       {lightboxIndex !== null && filtered[lightboxIndex] && (
         <ImageLightbox
           images={filtered}
+          allImages={images}
           index={lightboxIndex}
           onIndexChange={setLightboxIndex}
           onClose={() => setLightboxIndex(null)}
@@ -236,6 +240,7 @@ export function Gallery({
           onImageUpdated={onImageUpdated}
           onUseAsReference={onUseAsReference}
           onUseAsPrompt={onUseAsPrompt}
+          onRefine={onRefine}
         />
       )}
     </div>

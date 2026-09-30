@@ -22,6 +22,12 @@ export async function POST(req: NextRequest) {
   const model = (form.get("model") as string) || MODEL[0];
   const referenceImageIds = JSON.parse((form.get("referenceImageIds") as string) || "[]");
   const tag = (form.get("tag") as string) || null;
+  // Refine chain link. Not a FK (deleting a parent must not cascade), so just require a UUID.
+  const rawParent = form.get("parentImageId");
+  const parentImageId =
+    typeof rawParent === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawParent)
+      ? rawParent
+      : null;
 
   let rawPromptInputs: unknown = null;
   try {
@@ -108,6 +114,7 @@ export async function POST(req: NextRequest) {
       tag,
       promptInputs: promptInputs ? { ...promptInputs, referenceRoles } : null,
       referenceRoles,
+      parentImageId,
       previewPartials: 0,
       outputCompression: compression,
       durationMs,

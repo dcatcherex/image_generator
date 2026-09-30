@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
-import { ChevronLeft, ChevronRight, Download, Heart, Layers, Loader2, Tag as TagIcon, Trash2, Type, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, Heart, Layers, Loader2, Tag as TagIcon, Trash2, Type, Wand2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -15,12 +15,14 @@ import {
 } from "@/components/ui/select";
 import { formatDuration, imageCostLabel } from "@/lib/pricing";
 import { ASSIGNABLE_TAGS } from "@/lib/tags";
+import { getVersionChain } from "@/lib/version-chain";
 import type { ImageRecord } from "@/lib/types";
 
 const NO_TAG = "No tag";
 
 export function ImageLightbox({
   images,
+  allImages,
   index,
   onIndexChange,
   onClose,
@@ -28,8 +30,11 @@ export function ImageLightbox({
   onImageUpdated,
   onUseAsReference,
   onUseAsPrompt,
+  onRefine,
 }: {
   images: ImageRecord[];
+  // The whole gallery, so a refine chain can be followed even while a filter hides parts of it.
+  allImages: ImageRecord[];
   index: number;
   onIndexChange: (index: number) => void;
   onClose: () => void;
@@ -37,6 +42,7 @@ export function ImageLightbox({
   onImageUpdated: (image: ImageRecord) => void;
   onUseAsReference: (image: ImageRecord) => void;
   onUseAsPrompt: (image: ImageRecord) => void;
+  onRefine: (image: ImageRecord) => void;
 }) {
   const [deleting, setDeleting] = useState(false);
   const image = images[index];
@@ -122,6 +128,13 @@ export function ImageLightbox({
     onUseAsPrompt(image);
     onClose();
   }
+
+  function handleRefineClick() {
+    onRefine(image);
+    onClose();
+  }
+
+  const versions = getVersionChain(allImages, image.id);
 
   function handleUseAsReferenceClick() {
     onUseAsReference(image);
@@ -233,6 +246,34 @@ export function ImageLightbox({
           <Badge variant="outline" className="text-[10px]">{image.model}</Badge>
         </div>
 
+        {versions.length > 1 && (
+          <div className="flex flex-col gap-1.5">
+            <span className="text-xs text-muted-foreground">Versions</span>
+            <div className="flex flex-wrap gap-1.5">
+              {versions.map((v, i) => {
+                const target = images.findIndex((img) => img.id === v.id);
+                return (
+                  <button
+                    key={v.id}
+                    type="button"
+                    disabled={target === -1}
+                    onClick={() => onIndexChange(target)}
+                    title={target === -1 ? "Hidden by the current filter" : `Version ${i + 1}`}
+                    className={`relative size-12 overflow-hidden rounded-md border disabled:opacity-40 ${
+                      v.id === image.id ? "ring-2 ring-primary" : "opacity-80 hover:opacity-100"
+                    }`}
+                  >
+                    <Image src={v.blobUrl} alt={`Version ${i + 1}`} fill sizes="48px" className="object-cover" />
+                    <span className="absolute bottom-0.5 left-0.5 flex size-4 items-center justify-center rounded-full bg-background/80 text-[10px] font-medium">
+                      {i + 1}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {imageCostLabel(image) && (
           <p className="text-xs font-mono text-muted-foreground">
             {[
@@ -254,6 +295,9 @@ export function ImageLightbox({
         </Button>
         <Button size="icon" variant="secondary" className="size-8" onClick={handleUseAsReferenceClick} aria-label="Use as reference">
           <Layers className="size-4" />
+        </Button>
+        <Button size="icon" variant="secondary" className="size-8" onClick={handleRefineClick} aria-label="Refine">
+          <Wand2 className="size-4" />
         </Button>
         <Button
           size="icon"

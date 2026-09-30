@@ -100,6 +100,12 @@ export function GeneratePanel({
   generateStream,
   compareStream,
   onCompareDone,
+  changeOnly,
+  setChangeOnly,
+  preserve,
+  setPreserve,
+  parentImageId,
+  setParentImageId,
   visibility,
   isEditing,
   setIsEditing,
@@ -114,6 +120,13 @@ export function GeneratePanel({
   // Second stream instance so the two comparison requests can run side by side.
   compareStream: ReturnType<typeof useImageStream>;
   onCompareDone: (images: ImageRecord[]) => void;
+  // Lifted to Home so "Refine" can pre-fill them along with the prompt and references.
+  changeOnly: string;
+  setChangeOnly: (v: string) => void;
+  preserve: PreserveId[];
+  setPreserve: (v: PreserveId[]) => void;
+  parentImageId: string | null;
+  setParentImageId: (v: string | null) => void;
   visibility: PanelOptionVisibility;
   isEditing: boolean;
   setIsEditing: (v: boolean) => void;
@@ -130,8 +143,6 @@ export function GeneratePanel({
   const [tag, setTag] = useState<string>(NO_TAG);
   const [economyModeOn, setEconomyMode] = useState(false);
   const [compareToggle, setCompareToggle] = useState(false);
-  const [changeOnly, setChangeOnly] = useState("");
-  const [preserve, setPreserve] = useState<PreserveId[]>([]);
   // Hiding the Economy switch also turns the mode off, so a hidden toggle can't silently
   // keep routing generations through the slow batch path.
   const economyMode = visibility.economy && economyModeOn;
@@ -225,8 +236,15 @@ export function GeneratePanel({
       : {}),
   };
 
+  // The parent only counts while the refined image is still one of the references; once the
+  // user swaps or removes it, this is no longer a refinement of that image.
+  const activeParentId =
+    isEditMode && parentImageId && referenceItems.some((r) => r.sourceImageId === parentImageId)
+      ? parentImageId
+      : null;
+
   function togglePreserve(id: PreserveId) {
-    setPreserve((prev) => (prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id]));
+    setPreserve(preserve.includes(id) ? preserve.filter((p) => p !== id) : [...preserve, id]);
   }
 
   function handleAddToQueue() {
@@ -358,12 +376,14 @@ export function GeneratePanel({
       );
       referenceItems.forEach((item) => form.append("images", item.file));
       if (activeMask) form.set("mask", activeMask);
+      if (activeParentId) form.set("parentImageId", activeParentId);
       if (tagValue) form.set("tag", tagValue);
 
       const res = await fetch("/api/edit", { method: "POST", body: form });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Edit failed");
       onImageCreated(data.image);
+      setParentImageId(null);
       costStats.refresh();
       if (data.warning) toast.warning(data.warning);
       toast.success("Image edited");

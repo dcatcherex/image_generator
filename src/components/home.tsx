@@ -13,6 +13,7 @@ import { useImageStream } from "@/lib/use-image-stream";
 import { useGalleryView } from "@/lib/use-gallery-view";
 import { usePanelOptions } from "@/lib/use-panel-options";
 import { ALL_TAGS_FILTER } from "@/lib/tags";
+import type { PreserveId } from "@/lib/prompt-builder";
 import type { BatchJobRecord, ImageRecord } from "@/lib/types";
 
 // Client-side convenience poll interval while a tab is open and a batch is pending. The
@@ -30,6 +31,9 @@ export function Home() {
   const [referenceItems, setReferenceItems] = useState<ReferenceItem[]>([]);
   const [pendingBatchJobs, setPendingBatchJobs] = useState<BatchJobRecord[]>([]);
   const [isEditing, setIsEditing] = useState(false);
+  const [changeOnly, setChangeOnly] = useState("");
+  const [preserve, setPreserve] = useState<PreserveId[]>([]);
+  const [parentImageId, setParentImageId] = useState<string | null>(null);
   const generateStream = useImageStream();
   const compareStream = useImageStream();
   const [compareImages, setCompareImages] = useState<ImageRecord[] | null>(null);
@@ -92,6 +96,19 @@ export function Home() {
     setReferenceItems((prev) => [...prev, item]);
   }
 
+  // Unlike "Use as reference" (which appends and sets no parent), Refine starts a fresh edit
+  // of this one image: it replaces the references, carries the image's constraints forward
+  // and remembers it as the parent so the versions chain can be rebuilt later.
+  async function handleRefine(image: ImageRecord) {
+    const item = await referenceItemFromImage(image);
+    setReferenceItems([item]);
+    setChangeOnly(image.promptInputs?.changeOnly ?? "");
+    setPreserve(image.promptInputs?.preserve ?? []);
+    setParentImageId(image.id);
+    setPrompt("");
+    setTimeout(() => document.getElementById("prompt")?.focus(), 0);
+  }
+
   function handleUseAsPrompt(image: ImageRecord) {
     // Restore what the user typed, not the assembled text (older images have no inputs).
     setPrompt(image.promptInputs?.base ?? image.prompt);
@@ -139,6 +156,12 @@ export function Home() {
               generateStream={generateStream}
               compareStream={compareStream}
               onCompareDone={setCompareImages}
+              changeOnly={changeOnly}
+              setChangeOnly={setChangeOnly}
+              preserve={preserve}
+              setPreserve={setPreserve}
+              parentImageId={parentImageId}
+              setParentImageId={setParentImageId}
               visibility={panelOptions.visibility}
               isEditing={isEditing}
               setIsEditing={setIsEditing}
@@ -157,6 +180,7 @@ export function Home() {
             onImageUpdated={handleImageUpdated}
             onUseAsReference={handleUseAsReference}
             onUseAsPrompt={handleUseAsPrompt}
+            onRefine={handleRefine}
             query={query}
             setQuery={setQuery}
             favoritesOnly={favoritesOnly}

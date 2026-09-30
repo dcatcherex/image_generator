@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Image from "next/image";
-import { Download, Heart, Layers, Loader2, Tag as TagIcon, Trash2, TriangleAlert } from "lucide-react";
+import { Download, Heart, Layers, Loader2, Tag as TagIcon, Trash2, TriangleAlert, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -31,6 +31,7 @@ export function ImageCard({
   onImageUpdated,
   onDelete,
   onUseAsReference,
+  onRefine,
   onOpen,
   masonry = false,
 }: {
@@ -38,6 +39,7 @@ export function ImageCard({
   onImageUpdated: (image: ImageRecord) => void;
   onDelete: (image: ImageRecord) => void;
   onUseAsReference: (image: ImageRecord) => void;
+  onRefine: (image: ImageRecord) => void;
   onOpen?: () => void;
   masonry?: boolean;
 }) {
@@ -157,6 +159,16 @@ export function ImageCard({
               }
             />
             <TooltipContent>Use as reference</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button size="icon" variant="secondary" className="size-7" onClick={() => onRefine(image)}>
+                  <Wand2 className="size-3.5" />
+                </Button>
+              }
+            />
+            <TooltipContent>Refine</TooltipContent>
           </Tooltip>
           <Select value={image.tag ?? NO_TAG} onValueChange={(v) => v && handleTagChange(v)}>
             <SelectTrigger
