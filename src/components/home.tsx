@@ -10,6 +10,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { referenceItemFromImage, type ReferenceItem } from "@/lib/reference-items";
 import { useImageStream } from "@/lib/use-image-stream";
 import { useGalleryView } from "@/lib/use-gallery-view";
+import { usePanelOptions } from "@/lib/use-panel-options";
 import { ALL_TAGS_FILTER } from "@/lib/tags";
 import type { BatchJobRecord, ImageRecord } from "@/lib/types";
 
@@ -30,6 +31,7 @@ export function Home() {
   const [isEditing, setIsEditing] = useState(false);
   const generateStream = useImageStream();
   const galleryView = useGalleryView();
+  const panelOptions = usePanelOptions();
 
   useEffect(() => {
     fetch("/api/images")
@@ -106,6 +108,8 @@ export function Home() {
                 setView={galleryView.setView}
                 columns={galleryView.columns}
                 setColumns={galleryView.setColumns}
+                panelVisibility={panelOptions.visibility}
+                setPanelOptionVisible={panelOptions.setOptionVisible}
               />
               <UserButton />
             </div>
@@ -120,6 +124,7 @@ export function Home() {
               referenceItems={referenceItems}
               setReferenceItems={setReferenceItems}
               generateStream={generateStream}
+              visibility={panelOptions.visibility}
               isEditing={isEditing}
               setIsEditing={setIsEditing}
             />

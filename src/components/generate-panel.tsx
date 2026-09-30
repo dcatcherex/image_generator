@@ -29,6 +29,7 @@ import {
 import { estimateCost, formatCostThb } from "@/lib/pricing";
 import { ASSIGNABLE_TAGS } from "@/lib/tags";
 import type { useImageStream } from "@/lib/use-image-stream";
+import type { PanelOptionVisibility } from "@/lib/use-panel-options";
 import type { ReferenceItem } from "@/lib/reference-items";
 import type { BatchJobRecord, ImageRecord } from "@/lib/types";
 
@@ -76,6 +77,7 @@ export function GeneratePanel({
   referenceItems,
   setReferenceItems,
   generateStream,
+  visibility,
   isEditing,
   setIsEditing,
 }: {
@@ -86,17 +88,21 @@ export function GeneratePanel({
   referenceItems: ReferenceItem[];
   setReferenceItems: (items: ReferenceItem[]) => void;
   generateStream: ReturnType<typeof useImageStream>;
+  visibility: PanelOptionVisibility;
   isEditing: boolean;
   setIsEditing: (v: boolean) => void;
 }) {
   const [aspectRatio, setAspectRatio] = useState<string>("auto");
-  const [quality, setQuality] = useState<string>("medium");
+  const [quality, setQuality] = useState<string>("high");
   const [format, setFormat] = useState<string>("webp");
   const [background, setBackground] = useState<string>("auto");
   const [model, setModel] = useState<string>("gpt-image-2.5-sunburst");
   const [n, setN] = useState<number>(1);
   const [tag, setTag] = useState<string>(NO_TAG);
-  const [economyMode, setEconomyMode] = useState(false);
+  const [economyModeOn, setEconomyMode] = useState(false);
+  // Hiding the Economy switch also turns the mode off, so a hidden toggle can't silently
+  // keep routing generations through the slow batch path.
+  const economyMode = visibility.economy && economyModeOn;
   const [queue, setQueue] = useState<QueuedPrompt[]>([]);
   const [isSubmittingBatch, setIsSubmittingBatch] = useState(false);
   const [maskFile, setMaskFile] = useState<File | null>(null);
@@ -313,7 +319,7 @@ export function GeneratePanel({
       )}
 
       <div className="shrink-0 flex flex-col gap-4 p-4 pt-3 border-t">
-        {!isEditMode && (
+        {!isEditMode && visibility.economy && (
           <Tooltip>
             <TooltipTrigger
               render={
@@ -324,7 +330,7 @@ export function GeneratePanel({
                   </div>
                   <Switch
                     id="economy-mode"
-                    checked={economyMode}
+                    checked={economyModeOn}
                     onCheckedChange={(v) => setEconomyMode(Boolean(v))}
                   />
                 </div>
@@ -377,7 +383,7 @@ export function GeneratePanel({
         )}
 
         <div className="grid grid-cols-2 gap-3">
-          {!isEditMode && (
+          {!isEditMode && visibility.batch && (
             <div className="flex flex-col gap-1.5">
               <Label>Batch (n)</Label>
               <Select value={String(n)} onValueChange={(v) => v && setN(Number(v))}>
@@ -390,7 +396,7 @@ export function GeneratePanel({
               </Select>
             </div>
           )}
-          <div className="flex flex-col gap-1.5">
+          {visibility.size && <div className="flex flex-col gap-1.5">
             <Label>Size {size !== "auto" && <span className="text-muted-foreground font-normal">({size})</span>}</Label>
             <Select value={aspectRatio} onValueChange={(v) => v && setAspectRatio(v)}>
               <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
@@ -405,8 +411,8 @@ export function GeneratePanel({
                 ))}
               </SelectContent>
             </Select>
-          </div>
-          <div className="flex flex-col gap-1.5">
+          </div>}
+          {visibility.quality && <div className="flex flex-col gap-1.5">
             <Label>Quality</Label>
             <Select value={quality} onValueChange={(v) => v && setQuality(v)}>
               <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
@@ -416,8 +422,8 @@ export function GeneratePanel({
                 ))}
               </SelectContent>
             </Select>
-          </div>
-          <div className="flex flex-col gap-1.5">
+          </div>}
+          {visibility.format && <div className="flex flex-col gap-1.5">
             <Label>Format</Label>
             <Select value={format} onValueChange={(v) => v && setFormat(v)}>
               <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
@@ -427,8 +433,8 @@ export function GeneratePanel({
                 <SelectItem value="webp">WebP</SelectItem>
               </SelectContent>
             </Select>
-          </div>
-          <div className="flex flex-col gap-1.5">
+          </div>}
+          {visibility.background && <div className="flex flex-col gap-1.5">
             <Label>Background</Label>
             <Select value={background} onValueChange={(v) => v && setBackground(v)}>
               <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
@@ -438,33 +444,37 @@ export function GeneratePanel({
                 <SelectItem value="opaque">Opaque</SelectItem>
               </SelectContent>
             </Select>
+          </div>}
+        </div>
+
+        {visibility.tag && (
+          <div className="flex flex-col gap-1.5">
+            <Label>Tag</Label>
+            <Select value={tag} onValueChange={(v) => v && setTag(v)}>
+              <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value={NO_TAG}>{NO_TAG}</SelectItem>
+                {ASSIGNABLE_TAGS.map((t) => (
+                  <SelectItem key={t} value={t}>{t}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
-        </div>
+        )}
 
-        <div className="flex flex-col gap-1.5">
-          <Label>Tag</Label>
-          <Select value={tag} onValueChange={(v) => v && setTag(v)}>
-            <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value={NO_TAG}>{NO_TAG}</SelectItem>
-              {ASSIGNABLE_TAGS.map((t) => (
-                <SelectItem key={t} value={t}>{t}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="flex flex-col gap-1.5">
-          <Label>Model</Label>
-          <Select value={model} onValueChange={(v) => v && setModel(v)}>
-            <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {MODEL.map((m) => (
-                <SelectItem key={m} value={m}>{m}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        {visibility.model && (
+          <div className="flex flex-col gap-1.5">
+            <Label>Model</Label>
+            <Select value={model} onValueChange={(v) => v && setModel(v)}>
+              <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {MODEL.map((m) => (
+                  <SelectItem key={m} value={m}>{m}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
 
         <Button onClick={handleSubmit} disabled={busy} className="w-full gap-2 justify-between">
           <span className="flex items-center gap-2">

@@ -17,6 +17,9 @@ import {
   GALLERY_COLUMNS_MIN,
   type GalleryViewMode,
 } from "@/lib/use-gallery-view";
+import { PANEL_OPTIONS, type PanelOptionId, type PanelOptionVisibility } from "@/lib/use-panel-options";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { cn } from "cn";
 
 const THEME_OPTIONS = [
@@ -37,11 +40,15 @@ export function SettingsDialog({
   setView,
   columns,
   setColumns,
+  panelVisibility,
+  setPanelOptionVisible,
 }: {
   view: GalleryViewMode;
   setView: (v: GalleryViewMode) => void;
   columns: number;
   setColumns: (n: number) => void;
+  panelVisibility: PanelOptionVisibility;
+  setPanelOptionVisible: (id: PanelOptionId, visible: boolean) => void;
 }) {
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
@@ -142,6 +149,27 @@ export function SettingsDialog({
               value={[columns]}
               onValueChange={(v) => setColumns(Array.isArray(v) ? v[0] : v)}
             />
+
+            <div className="my-5 border-t" />
+
+            <h3 className="mb-1 text-sm font-semibold">Generate panel</h3>
+            <p className="mb-4 text-xs text-muted-foreground">
+              Hidden options keep their current value.
+            </p>
+            <div className="flex flex-col gap-3">
+              {PANEL_OPTIONS.map((option) => (
+                <div key={option.id} className="flex items-center justify-between gap-4">
+                  <Label htmlFor={`panel-opt-${option.id}`} className="text-sm font-normal">
+                    {option.label}
+                  </Label>
+                  <Switch
+                    id={`panel-opt-${option.id}`}
+                    checked={panelVisibility[option.id]}
+                    onCheckedChange={(v) => setPanelOptionVisible(option.id, Boolean(v))}
+                  />
+                </div>
+              ))}
+            </div>
           </div>
           </ScrollArea>
         </div>
