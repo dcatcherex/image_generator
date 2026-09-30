@@ -43,6 +43,7 @@ import {
   type PreserveId,
   type PromptInputs,
 } from "@/lib/prompt-builder";
+import { PROMPT_PRESETS, type PromptPreset } from "@/lib/prompt-presets";
 import { useCostStats } from "@/lib/use-cost-stats";
 import { useLivePreview } from "@/lib/use-live-preview";
 import { ASSIGNABLE_TAGS } from "@/lib/tags";
@@ -152,6 +153,8 @@ export function GeneratePanel({
   const [maskOwnerKey, setMaskOwnerKey] = useState<string | null>(null);
   const [maskEditorOpen, setMaskEditorOpen] = useState(false);
   const [compositeMask, setCompositeMask] = useState(true);
+  // A preset waiting on the user's OK because it would overwrite a non-empty prompt.
+  const [pendingPreset, setPendingPreset] = useState<PromptPreset | null>(null);
 
   const { generate, isGenerating, error } = generateStream;
   const livePreview = useLivePreview();
@@ -243,6 +246,35 @@ export function GeneratePanel({
     isEditMode && parentImageId && referenceItems.some((r) => r.sourceImageId === parentImageId)
       ? parentImageId
       : null;
+
+  function applyPreset(preset: PromptPreset) {
+    const p = preset.params ?? {};
+    setPrompt(preset.scaffold);
+    if (p.aspect) setAspectRatio(p.aspect);
+    if (p.tier) setTier(p.tier);
+    if (p.quality) setQuality(p.quality);
+    // Set format and background together (not via setBackground) so a preset's pair, e.g.
+    // transparent + png, can't trip the JPEG fallback against the previous format.
+    if (p.format) setFormat(p.format);
+    if (p.background) setBackgroundState(p.background);
+    if (preset.mode === "edit" && preset.preserve) setPreserve(preset.preserve);
+    setPendingPreset(null);
+    const details = [
+      p.quality && `quality ${p.quality}`,
+      p.aspect,
+      p.tier,
+      p.background === "transparent" && "transparent",
+      p.format && p.format.toUpperCase(),
+    ].filter(Boolean);
+    toast.success(`Applied preset: ${preset.label}${details.length ? ` (${details.join(", ")})` : ""}`);
+  }
+
+  function handlePresetPicked(id: string) {
+    const preset = PROMPT_PRESETS.find((x) => x.id === id);
+    if (!preset) return;
+    if (prompt.trim()) setPendingPreset(preset);
+    else applyPreset(preset);
+  }
 
   function togglePreserve(id: PreserveId) {
     setPreserve(preserve.includes(id) ? preserve.filter((p) => p !== id) : [...preserve, id]);
@@ -402,6 +434,32 @@ export function GeneratePanel({
     <div className="flex flex-col h-full min-h-0">
       <div className="flex flex-1 min-h-0 flex-col gap-4 p-4">
         <div className="flex flex-1 min-h-24 flex-col gap-1.5">
+          {visibility.presets && (
+            <div className="flex flex-col gap-1.5">
+              {/* Always controlled to "no selection" so the same preset can be picked twice. */}
+              <Select value={null} onValueChange={(v) => v && handlePresetPicked(v)}>
+                <SelectTrigger size="sm" className="w-full">
+                  <SelectValue placeholder={isEditMode ? "Edit presets…" : "Presets…"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {PROMPT_PRESETS.filter((x) => x.mode === (isEditMode ? "edit" : "generate")).map((x) => (
+                    <SelectItem key={x.id} value={x.id}>{x.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {pendingPreset && (
+                <div className="flex items-center gap-2 rounded-md border bg-muted/40 px-2.5 py-1.5 text-xs">
+                  <span className="flex-1">Replace prompt with “{pendingPreset.label}”?</span>
+                  <Button size="sm" className="h-6 px-2 text-xs" onClick={() => applyPreset(pendingPreset)}>
+                    Replace
+                  </Button>
+                  <Button size="sm" variant="ghost" className="h-6 px-2 text-xs" onClick={() => setPendingPreset(null)}>
+                    Cancel
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
           <div className="flex items-center justify-between">
             <Label htmlFor="prompt">Prompt</Label>
             {isEditMode && (
