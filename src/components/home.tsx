@@ -6,6 +6,7 @@ import { UserButton } from "@clerk/nextjs";
 import { GeneratePanel } from "@/components/generate-panel";
 import { Gallery } from "@/components/gallery";
 import { CompareDialog } from "@/components/compare-dialog";
+import { HelpDialog } from "@/components/help-dialog";
 import { SettingsDialog } from "@/components/settings-dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { referenceItemFromImage, type ReferenceItem } from "@/lib/reference-items";
@@ -140,6 +141,7 @@ export function Home() {
               Image Studio
             </h1>
             <div className="flex items-center gap-3">
+              <HelpDialog />
               <SettingsDialog
                 view={galleryView.view}
                 setView={galleryView.setView}
