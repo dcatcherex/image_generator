@@ -1,9 +1,13 @@
+import { requireUser } from "@/lib/require-user";
 import { NextRequest, NextResponse } from "next/server";
 import { and, desc, eq, ilike } from "drizzle-orm";
 import { getDb } from "@/db";
 import { images } from "@/db/schema";
 
 export async function GET(req: NextRequest) {
+  const denied = await requireUser();
+  if (denied) return denied;
+
   const { searchParams } = new URL(req.url);
   const q = searchParams.get("q")?.trim();
   const favoritesOnly = searchParams.get("favorites") === "true";

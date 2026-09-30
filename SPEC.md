@@ -168,7 +168,7 @@ vercel.json                     Vercel Cron config (hits /api/batch/cron daily a
 
 ## 7. Auth & Access Control
 
-- Clerk (`clerkMiddleware` in `src/proxy.ts`) protects every route except `/sign-in(.*)`, `/sign-up(.*)`, and `/api/batch/cron(.*)` — "protected-first" pattern. The cron route is the one deliberate exception: cron invocations carry no Clerk session, so it authenticates itself via a `CRON_SECRET` bearer token instead (checked inside the route handler, fails closed with 500 if `CRON_SECRET` isn't set).
+- Clerk auth is enforced per resource, not in middleware (`createRouteMatcher` is deprecated): `src/proxy.ts` only runs `clerkMiddleware()`; `src/app/page.tsx` calls `auth.protect()` and every API route handler calls `requireUser()` (`src/lib/require-user.ts`) except `/api/batch/cron`. Any new page or route must add its own check. The cron route is the one deliberate exception: cron invocations carry no Clerk session, so it authenticates itself via a `CRON_SECRET` bearer token instead (checked inside the route handler, fails closed with 500 if `CRON_SECRET` isn't set).
 - No role/permission model — single account, full access once signed in.
 - **Staying on Clerk development keys for now, by user decision** (usage-limited, shows a "Development mode" badge). Production keys would require running Clerk's interactive domain-setup wizard (`clerk deploy`) by hand — not automatable from an agent session. Revisit if/when usage limits become a problem.
 

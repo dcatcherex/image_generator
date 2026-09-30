@@ -1,18 +1,9 @@
-import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
+import { clerkMiddleware } from "@clerk/nextjs/server";
 
-const isPublicRoute = createRouteMatcher([
-  "/sign-in(.*)",
-  "/sign-up(.*)",
-  // Vercel Cron invokes this with no Clerk session — it authenticates itself via
-  // CRON_SECRET inside the route handler instead (see src/app/api/batch/cron/route.ts).
-  "/api/batch/cron(.*)",
-]);
-
-export default clerkMiddleware(async (auth, req) => {
-  if (!isPublicRoute(req)) {
-    await auth.protect();
-  }
-});
+// Only attaches Clerk auth state to requests. Authorization is enforced per resource: pages
+// call `auth.protect()` and API route handlers call `requireUser()` (src/lib/require-user.ts).
+// /api/batch/cron is intentionally unauthenticated by Clerk — it checks CRON_SECRET itself.
+export default clerkMiddleware();
 
 export const config = {
   matcher: [

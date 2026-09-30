@@ -1,7 +1,11 @@
+import { requireUser } from "@/lib/require-user";
 import { NextResponse } from "next/server";
 import { list } from "@vercel/blob";
 
 export async function GET() {
+  const denied = await requireUser();
+  if (denied) return denied;
+
   let totalBytes = 0;
   let count = 0;
   let cursor: string | undefined;

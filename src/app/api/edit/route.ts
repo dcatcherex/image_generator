@@ -1,3 +1,4 @@
+import { requireUser } from "@/lib/require-user";
 import { NextRequest, NextResponse } from "next/server";
 import type OpenAI from "openai";
 import { getOpenAI, MODEL } from "@/lib/openai";
@@ -6,6 +7,9 @@ import { persistGeneratedImage } from "@/lib/save-image";
 export const maxDuration = 300;
 
 export async function POST(req: NextRequest) {
+  const denied = await requireUser();
+  if (denied) return denied;
+
   const form = await req.formData();
 
   const prompt = form.get("prompt");

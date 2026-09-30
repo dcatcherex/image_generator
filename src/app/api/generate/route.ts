@@ -1,3 +1,4 @@
+import { requireUser } from "@/lib/require-user";
 import { NextRequest } from "next/server";
 import { getOpenAI, MODEL } from "@/lib/openai";
 import { persistGeneratedImage } from "@/lib/save-image";
@@ -6,6 +7,9 @@ import { sseStreamFromEvents } from "@/lib/sse";
 export const maxDuration = 300;
 
 export async function POST(req: NextRequest) {
+  const denied = await requireUser();
+  if (denied) return denied;
+
   const body = await req.json();
   const {
     prompt,

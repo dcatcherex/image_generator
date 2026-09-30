@@ -1,3 +1,4 @@
+import { requireUser } from "@/lib/require-user";
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { toFile } from "openai";
@@ -22,6 +23,9 @@ type QueuedRequest = {
 };
 
 export async function POST(req: NextRequest) {
+  const denied = await requireUser();
+  if (denied) return denied;
+
   const body = await req.json();
   const queued: QueuedRequest[] = Array.isArray(body?.requests) ? body.requests : [];
 

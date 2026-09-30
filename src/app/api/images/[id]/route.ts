@@ -1,3 +1,4 @@
+import { requireUser } from "@/lib/require-user";
 import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { del } from "@vercel/blob";
@@ -5,6 +6,9 @@ import { getDb } from "@/db";
 import { images } from "@/db/schema";
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const denied = await requireUser();
+  if (denied) return denied;
+
   const { id } = await params;
   const body = await req.json();
   const db = getDb();
@@ -29,6 +33,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 }
 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const denied = await requireUser();
+  if (denied) return denied;
+
   const { id } = await params;
   const db = getDb();
 

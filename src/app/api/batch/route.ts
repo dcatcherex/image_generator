@@ -1,3 +1,4 @@
+import { requireUser } from "@/lib/require-user";
 import { NextResponse } from "next/server";
 import { notInArray } from "drizzle-orm";
 import { getDb } from "@/db";
@@ -8,6 +9,9 @@ import { TERMINAL_BATCH_STATUSES } from "@/lib/batch";
 // cancelled with nothing usable), its images already exist in the normal /api/images list
 // or there's nothing to show, so the gallery has no more use for the batch_jobs row.
 export async function GET() {
+  const denied = await requireUser();
+  if (denied) return denied;
+
   const db = getDb();
   const rows = await db
     .select()
