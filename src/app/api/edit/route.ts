@@ -1,7 +1,7 @@
 import { requireUser } from "@/lib/require-user";
 import { NextRequest, NextResponse } from "next/server";
 import type OpenAI from "openai";
-import { getOpenAI, MODEL } from "@/lib/openai";
+import { getOpenAI, MODEL, validateSize } from "@/lib/openai";
 import { persistGeneratedImage } from "@/lib/save-image";
 import { actualSizeOr, usageToFields } from "@/lib/pricing";
 
@@ -24,6 +24,11 @@ export async function POST(req: NextRequest) {
 
   if (!prompt || typeof prompt !== "string") {
     return NextResponse.json({ error: "Prompt is required" }, { status: 400 });
+  }
+
+  const sizeError = validateSize(size);
+  if (sizeError) {
+    return NextResponse.json({ error: sizeError }, { status: 400 });
   }
 
   const files = form.getAll("images").filter((f): f is File => f instanceof File);

@@ -7,6 +7,7 @@ export const PANEL_OPTIONS = [
   { id: "preview", label: "Live preview" },
   { id: "batch", label: "Batch (n)" },
   { id: "size", label: "Size" },
+  { id: "tier", label: "Size tier" },
   { id: "quality", label: "Quality" },
   { id: "format", label: "Format" },
   { id: "background", label: "Background" },

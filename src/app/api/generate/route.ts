@@ -1,6 +1,6 @@
 import { requireUser } from "@/lib/require-user";
 import { NextRequest } from "next/server";
-import { getOpenAI, MODEL } from "@/lib/openai";
+import { getOpenAI, MODEL, validateSize } from "@/lib/openai";
 import { persistGeneratedImage } from "@/lib/save-image";
 import { sseStreamFromEvents } from "@/lib/sse";
 import { actualSizeOr, usageToFields, type ImageUsage } from "@/lib/pricing";
@@ -29,6 +29,11 @@ export async function POST(req: NextRequest) {
 
   if (!prompt || typeof prompt !== "string") {
     return new Response(JSON.stringify({ error: "Prompt is required" }), { status: 400 });
+  }
+
+  const sizeError = validateSize(size);
+  if (sizeError) {
+    return new Response(JSON.stringify({ error: sizeError }), { status: 400 });
   }
 
   // OpenAI supports n up to 10, but we cap at 4 to match the UI's n selector.

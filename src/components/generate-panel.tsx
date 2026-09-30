@@ -24,7 +24,9 @@ import {
   MODEL,
   N_OPTIONS,
   QUALITY_OPTIONS,
+  SIZE_TIERS,
   sizeFromAspectRatio,
+  type SizeTier,
 } from "@/lib/openai";
 import {
   BATCH_PRICE_MULTIPLIER,
@@ -101,6 +103,7 @@ export function GeneratePanel({
   setIsEditing: (v: boolean) => void;
 }) {
   const [aspectRatio, setAspectRatio] = useState<string>("auto");
+  const [tier, setTier] = useState<SizeTier>("1K");
   const [quality, setQuality] = useState<string>("high");
   const [format, setFormat] = useState<string>("webp");
   const [background, setBackground] = useState<string>("auto");
@@ -130,8 +133,8 @@ export function GeneratePanel({
 
   const size = useMemo(() => {
     const selected = ASPECT_RATIOS.find((ar) => ar.label === aspectRatio);
-    return selected?.ratio ? sizeFromAspectRatio(selected.ratio[0], selected.ratio[1]) : "auto";
-  }, [aspectRatio]);
+    return selected?.ratio ? sizeFromAspectRatio(selected.ratio[0], selected.ratio[1], tier) : "auto";
+  }, [aspectRatio, tier]);
 
   const draft = useMemo(() => {
     const one = estimateCostCalibrated(costStats.stats, model, quality, size, {
@@ -459,6 +462,18 @@ export function GeneratePanel({
                       {ar.label}
                     </span>
                   </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>}
+          {visibility.tier && <div className="flex flex-col gap-1.5">
+            <Label>Size tier</Label>
+            {/* Auto lets the model pick dimensions, so there's nothing for a tier to scale. */}
+            <Select value={tier} onValueChange={(v) => v && setTier(v as SizeTier)} disabled={aspectRatio === "auto"}>
+              <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {SIZE_TIERS.map((t) => (
+                  <SelectItem key={t.id} value={t.id}>{t.label}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
