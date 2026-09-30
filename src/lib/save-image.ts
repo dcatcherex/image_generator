@@ -3,6 +3,7 @@ import { randomUUID } from "crypto";
 import { getDb } from "@/db";
 import { images } from "@/db/schema";
 import { estimateCost } from "./pricing";
+import sharp from "sharp";
 import { rowToImageRecord } from "./image-record";
 import type { PromptInputs, ReferenceRole } from "./prompt-builder";
 import type { ImageRecord } from "./types";
@@ -11,6 +12,15 @@ function contentTypeFor(format: string) {
   if (format === "webp") return "image/webp";
   if (format === "jpeg") return "image/jpeg";
   return "image/png";
+}
+
+export const TRANSPARENCY_WARNING = "Transparent background requested but the image is fully opaque";
+
+/** Warning text for the client when a transparent background was requested but not delivered. */
+export function transparencyWarning(image: ImageRecord): string | undefined {
+  return image.background === "transparent" && image.transparencyOk === false
+    ? TRANSPARENCY_WARNING
+    : undefined;
 }
 
 export async function persistGeneratedImage(params: {
@@ -48,6 +58,17 @@ export async function persistGeneratedImage(params: {
     contentType: contentTypeFor(params.format),
   });
 
+  // Transparent backgrounds sometimes come back opaque; check the decoded pixels rather than
+  // trusting the request. A decode failure just leaves the check unknown.
+  let transparencyOk = params.transparencyOk ?? null;
+  if (params.background === "transparent") {
+    try {
+      transparencyOk = !(await sharp(buffer).stats()).isOpaque;
+    } catch (err) {
+      console.error("save-image: alpha check failed", err);
+    }
+  }
+
   const db = getDb();
   const cost = estimateCost(params.quality, params.requestedSize ?? params.size, {
     partials: params.previewPartials ?? 0,
@@ -78,7 +99,7 @@ export async function persistGeneratedImage(params: {
       outputTokens: params.outputTokens ?? null,
       durationMs: params.durationMs ?? null,
       outputCompression: params.outputCompression ?? null,
-      transparencyOk: params.transparencyOk ?? null,
+      transparencyOk,
       parentImageId: params.parentImageId ?? null,
       promptInputs: params.promptInputs ?? null,
       referenceRoles: params.referenceRoles ?? null,

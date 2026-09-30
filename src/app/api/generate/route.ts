@@ -1,7 +1,7 @@
 import { requireUser } from "@/lib/require-user";
 import { NextRequest } from "next/server";
-import { getOpenAI, MODEL, validateSize } from "@/lib/openai";
-import { persistGeneratedImage } from "@/lib/save-image";
+import { getOpenAI, MODEL, normalizeCompression, validateFormatBackground, validateSize } from "@/lib/openai";
+import { persistGeneratedImage, transparencyWarning } from "@/lib/save-image";
 import { sseStreamFromEvents } from "@/lib/sse";
 import { actualSizeOr, usageToFields, type ImageUsage } from "@/lib/pricing";
 
@@ -25,6 +25,7 @@ export async function POST(req: NextRequest) {
     n = 1,
     tag = null,
     preview = false,
+    compression: rawCompression = null,
   } = body ?? {};
 
   if (!prompt || typeof prompt !== "string") {
@@ -35,6 +36,12 @@ export async function POST(req: NextRequest) {
   if (sizeError) {
     return new Response(JSON.stringify({ error: sizeError }), { status: 400 });
   }
+
+  const formatError = validateFormatBackground(format, background);
+  if (formatError) {
+    return new Response(JSON.stringify({ error: formatError }), { status: 400 });
+  }
+  const compression = normalizeCompression(format, rawCompression);
 
   // OpenAI supports n up to 10, but we cap at 4 to match the UI's n selector.
   const count = Math.min(Math.max(Number(n) || 1, 1), 4);
@@ -59,6 +66,8 @@ export async function POST(req: NextRequest) {
         size,
         quality,
         output_format: format,
+      ...(compression != null ? { output_compression: compression } : {}),
+        ...(compression != null ? { output_compression: compression } : {}),
         background,
         n: 1,
         stream: true,
@@ -113,11 +122,12 @@ export async function POST(req: NextRequest) {
         sourceType: "generate",
         tag,
         previewPartials: partials,
+        outputCompression: compression,
         durationMs,
         ...usageToFields(usage),
       });
 
-      emit({ type: "done", image });
+      emit({ type: "done", image, warning: transparencyWarning(image) });
       return;
     }
 
@@ -128,6 +138,7 @@ export async function POST(req: NextRequest) {
       size,
       quality,
       output_format: format,
+      ...(compression != null ? { output_compression: compression } : {}),
       background,
       n: count,
       stream: false,
@@ -156,11 +167,12 @@ export async function POST(req: NextRequest) {
         sourceType: "generate",
         tag,
         previewPartials: 0,
+        outputCompression: compression,
         durationMs,
         // The response reports usage for the whole request; split it across the images.
         ...usageToFields(response.usage, { count: items.length }),
       });
-      emit({ type: "done", image, index: i, total: items.length });
+      emit({ type: "done", image, index: i, total: items.length, warning: transparencyWarning(image) });
     }
   });
 

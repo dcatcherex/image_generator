@@ -38,6 +38,7 @@ export function buildBatchJsonl(requests: BatchRequestMeta[]): string {
           quality: r.quality,
           output_format: r.format,
           background: r.background,
+          ...(r.compression != null ? { output_compression: r.compression } : {}),
           n: 1,
         },
       })

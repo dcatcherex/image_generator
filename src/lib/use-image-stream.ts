@@ -15,7 +15,7 @@ export function useImageStream() {
   const generate = useCallback(
     async (
       payload: Record<string, unknown>,
-      onDone: (image: ImageRecord) => void
+      onDone: (image: ImageRecord, warning?: string) => void
     ) => {
       const requested = Math.max(Number(payload.n) || 1, 1);
       setIsGenerating(true);
@@ -56,7 +56,7 @@ export function useImageStream() {
             } else if (event.type === "done") {
               setPartialB64(null);
               setPendingCount((prev) => Math.max(0, prev - 1));
-              onDone(event.image);
+              onDone(event.image, event.warning);
             } else if (event.type === "error") {
               setError(event.message);
             }

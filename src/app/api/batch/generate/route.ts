@@ -2,7 +2,7 @@ import { requireUser } from "@/lib/require-user";
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { toFile } from "openai";
-import { getOpenAI, MODEL, validateSize } from "@/lib/openai";
+import { getOpenAI, MODEL, normalizeCompression, validateFormatBackground, validateSize } from "@/lib/openai";
 import { getDb } from "@/db";
 import { batchJobs } from "@/db/schema";
 import { buildBatchJsonl, type BatchRequestMeta } from "@/lib/batch";
@@ -20,6 +20,7 @@ type QueuedRequest = {
   model?: string;
   n?: number;
   tag?: string | null;
+  compression?: number | null;
 };
 
 export async function POST(req: NextRequest) {
@@ -34,6 +35,9 @@ export async function POST(req: NextRequest) {
     if (!item.prompt || typeof item.prompt !== "string") continue;
     const sizeError = validateSize(item.size || "1024x1024");
     if (sizeError) return NextResponse.json({ error: sizeError }, { status: 400 });
+    const format = item.format || "png";
+    const formatError = validateFormatBackground(format, item.background || "auto");
+    if (formatError) return NextResponse.json({ error: formatError }, { status: 400 });
     // Same conservative cap as the instant-generate n selector (see src/lib/openai.ts
     // N_OPTIONS) — Economy mode reuses that same control in the UI, so keep them in sync.
     const count = Math.min(Math.max(Number(item.n) || 1, 1), 4);
@@ -43,10 +47,11 @@ export async function POST(req: NextRequest) {
         prompt: item.prompt,
         size: item.size || "1024x1024",
         quality: item.quality || "medium",
-        format: item.format || "png",
+        format,
         background: item.background || "auto",
         model: item.model || MODEL[0],
         tag: item.tag ?? null,
+        compression: normalizeCompression(format, item.compression),
       });
     }
   }

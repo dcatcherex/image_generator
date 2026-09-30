@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Image from "next/image";
-import { Download, Heart, Layers, Loader2, Tag as TagIcon, Trash2 } from "lucide-react";
+import { Download, Heart, Layers, Loader2, Tag as TagIcon, Trash2, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -117,6 +117,11 @@ export function ImageCard({
           {image.tag && (
             <Badge variant="outline" className="text-[10px] bg-background/80 max-w-32 truncate">
               {image.tag}
+            </Badge>
+          )}
+          {image.background === "transparent" && image.transparencyOk === false && (
+            <Badge variant="destructive" className="gap-1 text-[10px]" title="Transparent background requested but the image is fully opaque">
+              <TriangleAlert className="size-3" /> Opaque
             </Badge>
           )}
         </div>

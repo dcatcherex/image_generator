@@ -10,6 +10,7 @@ export const PANEL_OPTIONS = [
   { id: "tier", label: "Size tier" },
   { id: "quality", label: "Quality" },
   { id: "format", label: "Format" },
+  { id: "compression", label: "Compression" },
   { id: "background", label: "Background" },
   { id: "tag", label: "Tag" },
   { id: "model", label: "Model" },

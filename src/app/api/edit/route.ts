@@ -1,8 +1,8 @@
 import { requireUser } from "@/lib/require-user";
 import { NextRequest, NextResponse } from "next/server";
 import type OpenAI from "openai";
-import { getOpenAI, MODEL, validateSize } from "@/lib/openai";
-import { persistGeneratedImage } from "@/lib/save-image";
+import { getOpenAI, MODEL, normalizeCompression, validateFormatBackground, validateSize } from "@/lib/openai";
+import { persistGeneratedImage, transparencyWarning } from "@/lib/save-image";
 import { actualSizeOr, usageToFields } from "@/lib/pricing";
 
 export const maxDuration = 300;
@@ -31,6 +31,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: sizeError }, { status: 400 });
   }
 
+  const formatError = validateFormatBackground(format, background);
+  if (formatError) {
+    return NextResponse.json({ error: formatError }, { status: 400 });
+  }
+  const compression = normalizeCompression(format, form.get("compression"));
+
   const files = form.getAll("images").filter((f): f is File => f instanceof File);
   if (files.length === 0) {
     return NextResponse.json({ error: "At least one reference image is required" }, { status: 400 });
@@ -57,6 +63,7 @@ export async function POST(req: NextRequest) {
       quality: quality as OpenAI.ImageEditParams["quality"],
       output_format: format as OpenAI.ImageEditParams["output_format"],
       background: background as OpenAI.ImageEditParams["background"],
+      ...(compression != null ? { output_compression: compression } : {}),
       n: 1,
       stream: false,
     });
@@ -81,11 +88,12 @@ export async function POST(req: NextRequest) {
       referenceImageIds,
       tag,
       previewPartials: 0,
+      outputCompression: compression,
       durationMs,
       ...usageToFields(result.usage),
     });
 
-    return NextResponse.json({ image });
+    return NextResponse.json({ image, warning: transparencyWarning(image) });
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Edit failed" },

@@ -71,6 +71,8 @@ export type DoneImageEvent = {
   index?: number;
   /** Total number of images requested in this batch (only present when n > 1). */
   total?: number;
+  /** Set when the image doesn't fully honour the request (e.g. transparent requested, opaque returned). */
+  warning?: string;
 };
 
 export type ErrorEvent = {

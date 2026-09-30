@@ -83,4 +83,18 @@ export function validateSize(size: unknown): string | null {
   return null;
 }
 
+/** JPEG has no alpha channel, so a transparent background can't be honoured with it. */
+export function validateFormatBackground(format: string, background: string): string | null {
+  return format === "jpeg" && background === "transparent"
+    ? "Transparent background requires PNG or WebP (JPEG has no alpha channel)"
+    : null;
+}
+
+/** Compression (0-100) applies to JPEG/WebP only; null means "leave it to the API default". */
+export function normalizeCompression(format: string, raw: unknown): number | null {
+  if (format === "png" || raw == null || raw === "") return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? Math.min(Math.max(Math.round(n), 0), 100) : null;
+}
+
 export const N_OPTIONS = [1, 2, 4] as const;

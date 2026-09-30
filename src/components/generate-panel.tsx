@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
+import { Slider } from "@/components/ui/slider";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Select,
@@ -61,6 +62,7 @@ type QueuedPrompt = {
   quality: string;
   format: string;
   background: string;
+  compression: number | null;
   model: string;
   n: number;
   tag: string | null;
@@ -106,7 +108,9 @@ export function GeneratePanel({
   const [tier, setTier] = useState<SizeTier>("1K");
   const [quality, setQuality] = useState<string>("high");
   const [format, setFormat] = useState<string>("webp");
-  const [background, setBackground] = useState<string>("auto");
+  const [background, setBackgroundState] = useState<string>("auto");
+  // null = never moved, so nothing is sent and the API default applies.
+  const [compressionValue, setCompression] = useState<number | null>(null);
   const [model, setModel] = useState<string>("gpt-image-2.5-sunburst");
   const [n, setN] = useState<number>(1);
   const [tag, setTag] = useState<string>(NO_TAG);
@@ -125,6 +129,20 @@ export function GeneratePanel({
   const costStats = useCostStats();
 
   const isEditMode = referenceItems.length > 0;
+
+  // Compression only exists for JPEG/WebP; hiding the slider also stops sending it.
+  const compressionApplies = format !== "png";
+  const compression = visibility.compression && compressionApplies ? compressionValue : null;
+
+  // JPEG can't carry alpha, so picking Transparent while on JPEG falls back to PNG. (The
+  // format/background selects also disable the conflicting option, so this is a backstop.)
+  function setBackground(next: string) {
+    if (next === "transparent" && format === "jpeg") {
+      setFormat("png");
+      toast.info("Switched to PNG — JPEG can't be transparent");
+    }
+    setBackgroundState(next);
+  }
   // Only the instant single-image generate path streams; edits, batches (n > 1) and Economy
   // mode never do, so they never pay for previews.
   const previewApplies = !isEditMode && !economyMode && n === 1;
@@ -183,7 +201,7 @@ export function GeneratePanel({
     const tagValue = tag === NO_TAG ? null : tag;
     setQueue((q) => [
       ...q,
-      { id: crypto.randomUUID(), prompt, size, quality, format, background, model, n, tag: tagValue },
+      { id: crypto.randomUUID(), prompt, size, quality, format, background, compression, model, n, tag: tagValue },
     ]);
     setPrompt("");
     toast.success("Added to queue");
@@ -200,7 +218,7 @@ export function GeneratePanel({
       // The current draft (if any) is submitted alongside whatever's already queued,
       // without requiring an explicit "Add to queue" click first for the common
       // single-prompt case.
-      const draft = prompt.trim() ? [{ prompt, size, quality, format, background, model, n, tag: tagValue }] : [];
+      const draft = prompt.trim() ? [{ prompt, size, quality, format, background, compression, model, n, tag: tagValue }] : [];
       const requests = [...queue.map(({ id: _id, ...rest }) => rest), ...draft];
       if (requests.length === 0) {
         toast.error("Add a prompt to the queue first");
@@ -238,10 +256,11 @@ export function GeneratePanel({
     if (!isEditMode) {
       let created = 0;
       await generate(
-        { prompt, size, quality, format, background, model, n, tag: tagValue, preview: previewOn },
-        (image) => {
+        { prompt, size, quality, format, background, compression, model, n, tag: tagValue, preview: previewOn },
+        (image, warning) => {
           onImageCreated(image);
           created++;
+          if (warning) toast.warning(warning);
         }
       );
       costStats.refresh();
@@ -261,6 +280,7 @@ export function GeneratePanel({
       form.set("quality", quality);
       form.set("format", format);
       form.set("background", background);
+      if (compression != null) form.set("compression", String(compression));
       form.set("model", model);
       form.set(
         "referenceImageIds",
@@ -275,6 +295,7 @@ export function GeneratePanel({
       if (!res.ok) throw new Error(data.error || "Edit failed");
       onImageCreated(data.image);
       costStats.refresh();
+      if (data.warning) toast.warning(data.warning);
       toast.success("Image edited");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Edit failed");
@@ -495,7 +516,7 @@ export function GeneratePanel({
               <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="png">PNG</SelectItem>
-                <SelectItem value="jpeg">JPEG</SelectItem>
+                <SelectItem value="jpeg" disabled={background === "transparent"}>JPEG</SelectItem>
                 <SelectItem value="webp">WebP</SelectItem>
               </SelectContent>
             </Select>
@@ -506,12 +527,30 @@ export function GeneratePanel({
               <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="auto">Auto</SelectItem>
-                <SelectItem value="transparent">Transparent</SelectItem>
+                <SelectItem value="transparent" disabled={format === "jpeg"}>Transparent</SelectItem>
                 <SelectItem value="opaque">Opaque</SelectItem>
               </SelectContent>
             </Select>
           </div>}
         </div>
+
+        {visibility.compression && compressionApplies && (
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <Label>Compression</Label>
+              <span className="text-xs text-muted-foreground">
+                {compressionValue == null ? "API default" : compressionValue}
+              </span>
+            </div>
+            <Slider
+              min={0}
+              max={100}
+              step={1}
+              value={[compressionValue ?? 100]}
+              onValueChange={(v) => setCompression(Array.isArray(v) ? v[0] : v)}
+            />
+          </div>
+        )}
 
         {visibility.tag && (
           <div className="flex flex-col gap-1.5">
