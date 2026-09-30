@@ -17,6 +17,7 @@ import { formatDuration, imageCostLabel } from "@/lib/pricing";
 import { ASSIGNABLE_TAGS } from "@/lib/tags";
 import { useReadOnly } from "@/lib/read-only";
 import type { ImageRecord } from "@/lib/types";
+import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 
 const NO_TAG = "No tag";
 
@@ -46,6 +47,7 @@ export function ImageCard({
 }) {
   const readOnly = useReadOnly();
   const [deleting, setDeleting] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   async function handleDelete() {
     setDeleting(true);
@@ -215,7 +217,7 @@ export function ImageCard({
                   size="icon"
                   variant="secondary"
                   className="size-7 ml-auto"
-                  onClick={handleDelete}
+                  onClick={() => setConfirmingDelete(true)}
                   disabled={deleting}
                 >
                   {deleting ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
@@ -227,6 +229,12 @@ export function ImageCard({
           )}
         </div>
       </div>
+      <ConfirmDeleteDialog
+        image={image}
+        open={confirmingDelete}
+        onOpenChange={setConfirmingDelete}
+        onConfirm={handleDelete}
+      />
     </div>
   );
 }

@@ -18,6 +18,7 @@ import { ASSIGNABLE_TAGS } from "@/lib/tags";
 import { getVersionChain } from "@/lib/version-chain";
 import { useReadOnly } from "@/lib/read-only";
 import type { ImageRecord } from "@/lib/types";
+import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 
 const NO_TAG = "No tag";
 
@@ -47,11 +48,15 @@ export function ImageLightbox({
 }) {
   const readOnly = useReadOnly();
   const [deleting, setDeleting] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const image = images[index];
   const activeThumbRef = useRef<HTMLButtonElement>(null);
   const lastWheelRef = useRef(0);
 
   useEffect(() => {
+    // Paused while the delete confirmation is open: its Escape should only close the dialog,
+    // and arrow keys must not swap the image being confirmed.
+    if (confirmingDelete) return;
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key === "Escape") onClose();
       else if (e.key === "ArrowLeft") onIndexChange(Math.max(0, index - 1));
@@ -59,7 +64,7 @@ export function ImageLightbox({
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [index, images.length, onClose, onIndexChange]);
+  }, [index, images.length, onClose, onIndexChange, confirmingDelete]);
 
   useEffect(() => {
     document.body.style.overflow = "hidden";
@@ -75,6 +80,7 @@ export function ImageLightbox({
   // Wraps around at both ends so scrolling feels continuous, like the reference site's
   // rail. Throttled because trackpads fire many small wheel events per physical scroll.
   function handleWheel(e: React.WheelEvent) {
+    if (confirmingDelete) return;
     const now = Date.now();
     if (now - lastWheelRef.current < 350) return;
     if (Math.abs(e.deltaY) < 10) return;
@@ -310,7 +316,7 @@ export function ImageLightbox({
           size="icon"
           variant="secondary"
           className="size-8 ml-auto"
-          onClick={handleDelete}
+          onClick={() => setConfirmingDelete(true)}
           disabled={deleting}
         >
           {deleting ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
@@ -337,6 +343,12 @@ export function ImageLightbox({
       </div>
       </ScrollArea>
       </div>
+      <ConfirmDeleteDialog
+        image={image}
+        open={confirmingDelete}
+        onOpenChange={setConfirmingDelete}
+        onConfirm={handleDelete}
+      />
     </div>
   );
 }
