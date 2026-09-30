@@ -36,6 +36,7 @@ import {
   estimateCostCalibrated,
   formatCostThb,
 } from "@/lib/pricing";
+import { defaultReferenceRole, type PromptInputs } from "@/lib/prompt-builder";
 import { useCostStats } from "@/lib/use-cost-stats";
 import { useLivePreview } from "@/lib/use-live-preview";
 import { ASSIGNABLE_TAGS } from "@/lib/tags";
@@ -59,6 +60,7 @@ const NO_TAG = "No tag";
 type QueuedPrompt = {
   id: string;
   prompt: string;
+  promptInputs: PromptInputs;
   size: string;
   quality: string;
   format: string;
@@ -205,6 +207,10 @@ export function GeneratePanel({
 
   const busy = isGenerating || compareStream.isGenerating || isEditing || isSubmittingBatch;
 
+  // What the server assembles the final prompt from (see buildPrompt); more fields join in
+  // as the panel grows the matching inputs.
+  const promptInputs: PromptInputs = { base: prompt };
+
   function handleAddToQueue() {
     if (!prompt.trim()) {
       toast.error("Enter a prompt first");
@@ -213,7 +219,7 @@ export function GeneratePanel({
     const tagValue = tag === NO_TAG ? null : tag;
     setQueue((q) => [
       ...q,
-      { id: crypto.randomUUID(), prompt, size, quality, format, background, compression, model, n, tag: tagValue },
+      { id: crypto.randomUUID(), prompt, promptInputs, size, quality, format, background, compression, model, n, tag: tagValue },
     ]);
     setPrompt("");
     toast.success("Added to queue");
@@ -230,7 +236,7 @@ export function GeneratePanel({
       // The current draft (if any) is submitted alongside whatever's already queued,
       // without requiring an explicit "Add to queue" click first for the common
       // single-prompt case.
-      const draft = prompt.trim() ? [{ prompt, size, quality, format, background, compression, model, n, tag: tagValue }] : [];
+      const draft = prompt.trim() ? [{ prompt, promptInputs, size, quality, format, background, compression, model, n, tag: tagValue }] : [];
       const requests = [...queue.map(({ id: _id, ...rest }) => rest), ...draft];
       if (requests.length === 0) {
         toast.error("Add a prompt to the queue first");
@@ -269,7 +275,7 @@ export function GeneratePanel({
       // Same payload for both models, tied together by a client-made group id so the pair
       // can be found again later. Each stream reports into its own gallery tile.
       const compareGroupId = crypto.randomUUID();
-      const payload = { prompt, size, quality, format, background, compression, n: 1, tag: tagValue, preview: previewOn, compareGroupId };
+      const payload = { promptInputs, size, quality, format, background, compression, n: 1, tag: tagValue, preview: previewOn, compareGroupId };
       const results: ImageRecord[] = [];
       await Promise.all(
         [generateStream, compareStream].map((stream, i) =>
@@ -293,7 +299,7 @@ export function GeneratePanel({
     if (!isEditMode) {
       let created = 0;
       await generate(
-        { prompt, size, quality, format, background, compression, model, n, tag: tagValue, preview: previewOn },
+        { promptInputs, size, quality, format, background, compression, model, n, tag: tagValue, preview: previewOn },
         (image, warning) => {
           onImageCreated(image);
           created++;
@@ -312,7 +318,16 @@ export function GeneratePanel({
     setIsEditing(true);
     try {
       const form = new FormData();
-      form.set("prompt", prompt);
+      form.set(
+        "promptInputs",
+        JSON.stringify({
+          ...promptInputs,
+          referenceRoles: referenceItems.map((item, i) => ({
+            role: item.role ?? defaultReferenceRole(i),
+            ...(item.note?.trim() ? { note: item.note.trim() } : {}),
+          })),
+        })
+      );
       form.set("size", size);
       form.set("quality", quality);
       form.set("format", format);

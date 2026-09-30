@@ -96,6 +96,7 @@ export async function checkAndIngestPendingBatches(): Promise<{
                 tag: meta.tag,
                 previewPartials: 0,
                 outputCompression: meta.compression ?? null,
+                promptInputs: meta.promptInputs ?? null,
                 // No duration for batch rows: queue time isn't generation time, and a null
                 // duration_ms is what keeps their discounted costs out of cost-stats.
                 ...usageToFields(line.response?.body?.usage, { batch: true }),

@@ -2,6 +2,7 @@ import { requireUser } from "@/lib/require-user";
 import { NextRequest } from "next/server";
 import { getOpenAI, MODEL, normalizeCompression, validateFormatBackground, validateSize } from "@/lib/openai";
 import { persistGeneratedImage, transparencyWarning } from "@/lib/save-image";
+import { buildPrompt, sanitizePromptInputs } from "@/lib/prompt-builder";
 import { sseStreamFromEvents } from "@/lib/sse";
 import { actualSizeOr, usageToFields, type ImageUsage } from "@/lib/pricing";
 
@@ -18,7 +19,8 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json();
   const {
-    prompt,
+    prompt: rawPrompt,
+    promptInputs: rawPromptInputs,
     size = "1024x1024",
     quality = "medium",
     format = "png",
@@ -31,9 +33,14 @@ export async function POST(req: NextRequest) {
     compareGroupId: rawCompareGroupId = null,
   } = body ?? {};
 
-  if (!prompt || typeof prompt !== "string") {
+  // Structured inputs are authoritative; a plain `prompt` string stays supported and is
+  // treated as `{ base: prompt }` (without storing prompt_inputs, as before).
+  const promptInputs = sanitizePromptInputs(rawPromptInputs);
+  const base = promptInputs?.base ?? rawPrompt;
+  if (!base || typeof base !== "string") {
     return new Response(JSON.stringify({ error: "Prompt is required" }), { status: 400 });
   }
+  const prompt = promptInputs ? buildPrompt(promptInputs) : base;
 
   const sizeError = validateSize(size);
   if (sizeError) {
@@ -130,6 +137,7 @@ export async function POST(req: NextRequest) {
         previewPartials: partials,
         outputCompression: compression,
         compareGroupId,
+        promptInputs,
         durationMs,
         ...usageToFields(usage),
       });
@@ -176,6 +184,7 @@ export async function POST(req: NextRequest) {
         previewPartials: 0,
         outputCompression: compression,
         compareGroupId,
+        promptInputs,
         durationMs,
         // The response reports usage for the whole request; split it across the images.
         ...usageToFields(response.usage, { count: items.length }),

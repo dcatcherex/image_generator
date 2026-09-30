@@ -1,3 +1,4 @@
+import type { ReferenceRole } from "./prompt-builder";
 import type { ImageRecord } from "./types";
 
 export type ReferenceItem = {
@@ -5,6 +6,10 @@ export type ReferenceItem = {
   file: File;
   previewUrl: string;
   sourceImageId?: string;
+  // Unset means "use the default for this position" (first = subject, rest = other), so
+  // removing the first image doesn't leave a stale role behind.
+  role?: ReferenceRole;
+  note?: string;
 };
 
 export async function referenceItemFromImage(image: ImageRecord): Promise<ReferenceItem> {

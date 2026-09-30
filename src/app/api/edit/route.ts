@@ -2,6 +2,7 @@ import { requireUser } from "@/lib/require-user";
 import { NextRequest, NextResponse } from "next/server";
 import type OpenAI from "openai";
 import { getOpenAI, MODEL, normalizeCompression, validateFormatBackground, validateSize } from "@/lib/openai";
+import { buildPrompt, defaultReferenceRole, sanitizePromptInputs } from "@/lib/prompt-builder";
 import { persistGeneratedImage, transparencyWarning } from "@/lib/save-image";
 import { actualSizeOr, usageToFields } from "@/lib/pricing";
 
@@ -13,7 +14,7 @@ export async function POST(req: NextRequest) {
 
   const form = await req.formData();
 
-  const prompt = form.get("prompt");
+  const rawPrompt = form.get("prompt");
   const size = (form.get("size") as string) || "1024x1024";
   const quality = (form.get("quality") as string) || "medium";
   const format = (form.get("format") as string) || "png";
@@ -22,7 +23,16 @@ export async function POST(req: NextRequest) {
   const referenceImageIds = JSON.parse((form.get("referenceImageIds") as string) || "[]");
   const tag = (form.get("tag") as string) || null;
 
-  if (!prompt || typeof prompt !== "string") {
+  let rawPromptInputs: unknown = null;
+  try {
+    const json = form.get("promptInputs");
+    if (typeof json === "string" && json) rawPromptInputs = JSON.parse(json);
+  } catch {
+    return NextResponse.json({ error: "promptInputs must be valid JSON" }, { status: 400 });
+  }
+  const promptInputs = sanitizePromptInputs(rawPromptInputs);
+  const base = promptInputs?.base ?? rawPrompt;
+  if (!base || typeof base !== "string") {
     return NextResponse.json({ error: "Prompt is required" }, { status: 400 });
   }
 
@@ -41,6 +51,15 @@ export async function POST(req: NextRequest) {
   if (files.length === 0) {
     return NextResponse.json({ error: "At least one reference image is required" }, { status: 400 });
   }
+
+  // Roles are aligned with upload order; when the client sent none, default them so the
+  // stored record always has one entry per reference image.
+  if (promptInputs?.referenceRoles && promptInputs.referenceRoles.length !== files.length) {
+    return NextResponse.json({ error: "referenceRoles must match the number of images" }, { status: 400 });
+  }
+  const referenceRoles =
+    promptInputs?.referenceRoles ?? files.map((_, i) => ({ role: defaultReferenceRole(i) }));
+  const prompt = promptInputs ? buildPrompt({ ...promptInputs, referenceRoles }) : base;
 
   const mask = form.get("mask");
   if (mask instanceof File && files.length !== 1) {
@@ -87,6 +106,8 @@ export async function POST(req: NextRequest) {
       sourceType: "edit",
       referenceImageIds,
       tag,
+      promptInputs: promptInputs ? { ...promptInputs, referenceRoles } : null,
+      referenceRoles,
       previewPartials: 0,
       outputCompression: compression,
       durationMs,

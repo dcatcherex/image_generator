@@ -93,7 +93,8 @@ export function Home() {
   }
 
   function handleUseAsPrompt(image: ImageRecord) {
-    setPrompt(image.prompt);
+    // Restore what the user typed, not the assembled text (older images have no inputs).
+    setPrompt(image.promptInputs?.base ?? image.prompt);
   }
 
   // One placeholder tile per image still expected from each active stream (the first tile of a

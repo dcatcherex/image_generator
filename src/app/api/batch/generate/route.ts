@@ -5,6 +5,7 @@ import { toFile } from "openai";
 import { getOpenAI, MODEL, normalizeCompression, validateFormatBackground, validateSize } from "@/lib/openai";
 import { getDb } from "@/db";
 import { batchJobs } from "@/db/schema";
+import { buildPrompt, sanitizePromptInputs } from "@/lib/prompt-builder";
 import { buildBatchJsonl, type BatchRequestMeta } from "@/lib/batch";
 
 export const maxDuration = 60;
@@ -13,6 +14,7 @@ export const maxDuration = 60;
 // settings and its own repeat count `n`, unlike a single generate/edit request.
 type QueuedRequest = {
   prompt: unknown;
+  promptInputs?: unknown;
   size?: string;
   quality?: string;
   format?: string;
@@ -32,7 +34,10 @@ export async function POST(req: NextRequest) {
 
   const requests: BatchRequestMeta[] = [];
   for (const item of queued) {
-    if (!item.prompt || typeof item.prompt !== "string") continue;
+    const promptInputs = sanitizePromptInputs(item.promptInputs);
+    const base = promptInputs?.base ?? item.prompt;
+    if (!base || typeof base !== "string") continue;
+    const prompt = promptInputs ? buildPrompt(promptInputs) : base;
     const sizeError = validateSize(item.size || "1024x1024");
     if (sizeError) return NextResponse.json({ error: sizeError }, { status: 400 });
     const format = item.format || "png";
@@ -44,7 +49,8 @@ export async function POST(req: NextRequest) {
     for (let i = 0; i < count; i++) {
       requests.push({
         customId: randomUUID(),
-        prompt: item.prompt,
+        prompt,
+        promptInputs,
         size: item.size || "1024x1024",
         quality: item.quality || "medium",
         format,
