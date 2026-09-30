@@ -2,6 +2,8 @@
 
 This is a handoff doc for continuing work on this project in a fresh chat session. Read `SPEC.md` first for full context (architecture, data model, flows) — this doc is only the **outstanding work**, broken into discrete, independently-startable tasks.
 
+> **Active work:** GPT Image 2.5 enhancements (cost/latency tracking, 2K/4K, transparency, model compare, edit workflow, presets) are specified and phased in `ENHANCEMENTS.md`. Cost-estimate work there supersedes task 2 below.
+
 **Live**: https://image-generator-ruddy-one.vercel.app
 **Repo**: https://github.com/dcatcherex/image_generator (branch `master`, auto-deploys to Vercel production on push)
 
