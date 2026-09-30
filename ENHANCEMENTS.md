@@ -2,6 +2,8 @@
 
 Handoff doc for a fresh session. Derived from OpenAI's *GPT Image 2.5 prompting guide* (developers.openai.com/api/docs/guides/image-prompting) and a gap analysis of this codebase on 2026-09-30.
 
+**Pricing numbers:** `src/docs/gpt-image-2.5-pricing-reference.md` (official 2.5 token table + observed usage from this app).
+
 **Read first:** `AGENTS.md` (this Next.js version differs from training data — check `node_modules/next/dist/docs/` before writing Next-specific code), `SPEC.md` (architecture, data model, flows), `PLAN.md` "Gotchas" section.
 
 **Ground rules**
@@ -21,7 +23,8 @@ Handoff doc for a fresh session. Derived from OpenAI's *GPT Image 2.5 prompting 
 | # | Area | Decision |
 |---|---|---|
 | 1 | Scope | All four themes, implemented in order **C (measurement) → D (params) → B (edit workflow) → A (prompt authoring)**. |
-| 2 | Cost | Keep a pre-generation estimate **and** record actual cost from the response `usage`. Estimates self-calibrate from recorded actuals (median per model+quality+size), falling back to the static table. |
+| 2 | Cost | Keep a pre-generation estimate **and** record actual cost from the response `usage`. Estimates self-calibrate from recorded actuals (median per model+quality+size), falling back to the official GPT Image 2.5 token table in `src/docs/gpt-image-2.5-pricing-reference.md`. The Batch discount for 2.5 is **verified at exactly 50%** from billing (2026-09-30). |
+| 2a | Live preview | Streamed partial images cost 100 output tokens ($0.003) each. The live preview becomes an **optional toggle, default off**. |
 | 3 | Resolution | Add a **size tier** picker (1K / 2K / 4K-experimental) that combines with the existing aspect-ratio picker. |
 | 4 | Transparency | Disable JPEG while background=transparent (and vice versa); verify alpha server-side and warn if the output is actually opaque; add an `output_compression` slider shown only for JPEG/WebP. |
 
@@ -46,6 +49,8 @@ All nullable, so existing rows stay valid:
 | Column | Type | Purpose |
 |---|---|---|
 | `actual_cost` | numeric(10,4) | USD computed from `usage` |
+| `requested_size` | text | What the user asked for (`"auto"` or `WxH`). The existing `size` column now stores the **actual returned dimensions** from the response's `size` field when present (`auto` returns sizes like `1254x1254`, not multiples of 16). Cost stats group by `requested_size`, since that's what's known before generating. |
+| `preview_partials` | integer | Number of streamed partial images requested (0 when preview off) — needed to reconcile cost |
 | `input_tokens` | integer | `usage.input_tokens` |
 | `input_image_tokens` | integer | `usage.input_tokens_details.image_tokens` |
 | `output_tokens` | integer | `usage.output_tokens` |
@@ -57,7 +62,14 @@ All nullable, so existing rows stay valid:
 | `reference_roles` | jsonb | `Array<{ role: ReferenceRole; note?: string }>`, aligned with `reference_image_ids` / upload order |
 | `compare_group_id` | uuid | Shared by the two images of a model comparison |
 
-`BatchRequestMeta` (`src/lib/batch.ts`) gains `compression: number | null` and `promptInputs: PromptInputs | null`. Batch ingestion (`src/lib/batch-poll.ts`) should record `usage` if present in each output line's `response.body.usage` and apply the 50% discount to `actual_cost`.
+`BatchRequestMeta` (`src/lib/batch.ts`) gains `compression: number | null` and `promptInputs: PromptInputs | null`. Batch ingestion (`src/lib/batch-poll.ts`) records `response.body.usage` from each output line (**confirmed present** for Sunburst batches — shape below) and `response.body.size` as the actual size; `actual_cost` uses `BATCH_PRICE_MULTIPLIER` (see Cost).
+
+Observed batch output `usage` (2026-09-28):
+```json
+{"input_tokens":1351,"input_tokens_details":{"image_tokens":0,"text_tokens":1351},
+ "output_tokens":1372,"output_tokens_details":{"image_tokens":1372,"text_tokens":0},"total_tokens":2723}
+```
+Also backfill: the 9 existing batch images can get `actual_cost`/tokens/actual size by re-reading their batches' output files (still retrievable via `openai.files.content(output_file_id)`), matched by `custom_id` → the image created from it. Optional one-off script; skip if the mapping from `custom_id` to image row isn't recoverable.
 
 `ImageRecord` (`src/lib/types.ts`) gets matching camelCase fields. There are currently multiple row→record mappings (`save-image.ts`, `/api/images`, maybe others — grep for `blobPathname:`); consolidate them into one `rowToImageRecord()` in `src/lib/image-record.ts` as part of Phase 0.
 
@@ -125,10 +137,23 @@ Replace the single `TARGET_PIXEL_AREA` in `src/lib/openai.ts` with tiers:
 
 ### Cost
 
-- `src/lib/pricing.ts`: add `actualCostFromUsage(usage, { batch?: boolean })` using OpenAI's published GPT Image 2.5 token prices (already quoted in that file's header comment): $8/M image input, $5/M text input (text tokens = `input_tokens - image_tokens`), $30/M image output. Ignore cached-token discounts (not exposed per request). Halve when `batch`.
-- `estimateCost()` fallback: extend beyond the three 1K sizes by scaling the nearest 1K entry by pixel area (currently unknown sizes silently fall back to the 1024×1024 price, which is wrong for 2K/4K).
-- Calibration: new `GET /api/cost-stats` returns `{ [key: "model|quality|size"]: { median: number, count: number } }` over rows where both `actual_cost` and `duration_ms` are not null. Batch rows never get a `duration_ms`, so this excludes their 50%-discounted costs from instant-mode estimates. The panel fetches it once on mount; if `count >= 3` for the current key, show that median instead of the table value. Show "~" before table-based values and no "~" before calibrated ones.
+Source of truth for numbers: `src/docs/gpt-image-2.5-pricing-reference.md`.
+
+- `src/lib/pricing.ts`: add `actualCostFromUsage(usage, { batch?: boolean })`: $8/M image input, $5/M text input, $30/M image output. Prefer `input_tokens_details.text_tokens` / `image_tokens` when present, else text = `input_tokens - image_tokens`. Cached discounts don't apply to the direct Images API — ignore them. For batch, multiply by `BATCH_PRICE_MULTIPLIER`.
+- `BATCH_PRICE_MULTIPLIER = 0.5` in `pricing.ts` (verified from billing — comment should point to the pricing doc's "Verifying the Batch price" section). Replace the hard-coded `ECONOMY_DISCOUNT = 0.5` in `generate-panel.tsx` with this shared constant.
+- Replace the GPT Image 2 `COST_TABLE` with the **official GPT Image 2.5 output-token table** (tokens, not dollars) for all documented sizes: 1024×1024, 1024×1536, 1536×1024, 1536×864, 2048×1152, 2560×1440, 2048×2048, 3840×2160, 2160×3840 × 5 qualities. Mirror orientation for sizes only listed one way. `estimateCost(quality, size, { partials, promptChars })` = output tokens × $30/M + `partials` × 100 × $30/M + `ceil(promptChars / 4)` × $5/M (rough text-input estimate). Delete the old "no published numbers / extrapolated" comments.
+- Sizes not in the table (the app's computed aspect-ratio sizes mostly aren't): use the documented size with the **nearest pixel area and same orientation**, and mark the estimate approximate. Do **not** scale by megapixels — the official table isn't linear (2048×2048 costs more than 3840×2160). `auto` size: use the 1024×1024 row, approximate. `auto` quality: `medium` row, approximate (current behavior).
+- Recorded actuals take over from the table via calibration (below), which is the long-term answer for non-documented sizes.
+- Calibration: new `GET /api/cost-stats` returns `{ [key: "model|quality|requested_size"]: { median: number, count: number } }` over rows where both `actual_cost` and `duration_ms` are not null. Batch rows never get a `duration_ms`, so this excludes their 50%-discounted costs from instant-mode estimates. The panel fetches it once on mount; if `count >= 3` for the current key, show that median instead of the table value. Show "~" before table-based values and no "~" before calibrated ones.
 - Card/lightbox: show actual cost (฿) when present, else the estimate with "~". Lightbox also shows duration ("12.4s") and tokens in a small metadata line.
+
+### Optional live preview
+
+- New panel toggle **"Live preview"**, **default off**, persisted in localStorage (follow `use-panel-options.ts` / `use-gallery-view.ts` pattern), with helper text showing its cost, e.g. "+฿0.20 per image" (2 × 100 tokens × $30/M × THB rate).
+- `/api/generate` accepts `preview: boolean`. n=1 keeps the streaming path either way (so the SSE `done` flow is unchanged), but sends `partial_images: preview ? 2 : 0`. n>1 is already non-streaming — unaffected.
+- When preview is off, the gallery shows the existing pulsing placeholder tile (the n>1 path already has one) instead of the progressive image.
+- Store `preview_partials` on the row; include it in `estimateCost()` and in the displayed estimate. `usage.output_tokens` from the completed event should already include partial tokens — verify once with preview on (expect +200 vs the table).
+- Economy mode and edits never stream, so they never pay for previews.
 
 ### Transparency & compression
 
@@ -158,7 +183,7 @@ Replace the single `TARGET_PIXEL_AREA` in `src/lib/openai.ts` with tiers:
   - Edit: Product cutout (transparent, png, preserve product), Style transfer, Change clothing (preserve identity+pose+background+camera), Combine references, Remove object (preserve everything else), Sketch → photo (preserve layout+camera), Translate text (high, preserve layout), Swap furniture/object (preserve camera+lighting).
 - Panel: a "Presets" dropdown above the prompt, filtered by current mode. Picking one: if the textarea is non-empty, confirm via a small inline "Replace prompt?" choice (no `window.confirm` — use a Popover/Dialog); then insert scaffold, apply params and preserve chips, toast "Applied preset: <label> (quality high, 16:9)".
 - **Exact text**: collapsible "Exact text" input under the prompt (both modes). When set and quality is `low`, show a hint "Small text renders better at medium or higher".
-- Add new panel sections to `PANEL_OPTIONS` in `use-panel-options.ts` so they can be hidden in Settings: `tier`, `compression`, `compare`, `presets`, `exactText`, `preserve`.
+- Add new panel sections to `PANEL_OPTIONS` in `use-panel-options.ts` so they can be hidden in Settings: `preview`, `tier`, `compression`, `compare`, `presets`, `exactText`, `preserve`.
 
 ---
 
@@ -178,18 +203,22 @@ Each phase is independently shippable. Do them in order; later phases assume ear
 1. `pricing.ts`: `actualCostFromUsage()`.
 2. `/api/generate`: record `t0` before the OpenAI call; streaming path — capture `usage` from the completed event (`ImageGenCompletedEvent.usage`) and stop the clock on it; non-streaming path — `response.usage` and stop the clock when the call resolves. For n>1, split tokens and cost evenly across images and give each the same duration.
 3. `/api/edit`: same, from `result.usage`.
-4. Batch ingestion (`batch-poll.ts`): read `response.body.usage` if present, `batch: true`, `duration_ms` null.
-5. Card + lightbox cost/duration display.
-6. Do **one** real `low` 1K generation to confirm `usage` is present for `gpt-image-2.5-*` (SDK types say "gpt-image-1 only" on `ImagesResponse.usage`; the streaming event types say "GPT image models"). If absent, keep columns null and fall back gracefully — never crash.
+4. Batch ingestion (`batch-poll.ts`): read `response.body.usage` and `response.body.size`, `batch: true`, `duration_ms` null.
+5. Save the actual returned `size` (response `size` field) into `size`, and the request's size into `requested_size`, in all three paths. Backfill `requested_size = size` for existing rows.
+6. Live preview toggle (see spec) — `preview` flag, `partial_images: preview ? 2 : 0`, `preview_partials` column, placeholder tile when off.
+7. Card + lightbox cost/duration display.
+8. `usage` is confirmed for Sunburst **batch** outputs. Do **one** real `low` 1K instant generation with preview **on** to confirm the streamed completed event carries `usage` and that `output_tokens` ≈ table value + 200. Handle null `usage` gracefully regardless — never crash.
 
-**Accept:** a new image shows actual ฿ cost and duration; old images still show the estimate.
+**Accept:** a new image shows actual ฿ cost, duration and real dimensions; preview is off by default and turning it on restores the progressive preview; old images still show the estimate.
 
 ### Phase 2 — Calibrated estimates (C2)
 1. `GET /api/cost-stats` (auth-gated with `requireUser()` like other routes), median via SQL `percentile_cont(0.5)` grouped by model, quality, size where `actual_cost` and `duration_ms` are not null.
-2. Pixel-area scaling fallback in `estimateCost()`.
+2. Replace `COST_TABLE` with the 2.5 output-token table and nearest-documented-size fallback; add partials and prompt-text terms; shared `BATCH_PRICE_MULTIPLIER = 0.5`.
 3. Panel uses stats when `count >= 3`; "~" prefix only for table values. Refetch stats after each completed generation.
 
-**Accept:** with ≥3 real rows for a combo, the badge shows their median.
+**Accept:** 1024×1536 `high` estimates $0.04116 + text (matches the official table); with ≥3 real rows for a combo, the badge shows their median; Economy shows half the instant estimate.
+
+Batch price is already verified (see pricing doc) — no manual step needed. Sanity check for the optional backfill: the 9 existing batch images should total **$0.2531** actual cost.
 
 ### Phase 3 — Size tiers (D1)
 1. `SIZE_TIERS`, new `sizeFromAspectRatio(w, h, tier)`, `validateSize()` in `src/lib/openai.ts`. Write a quick table check (a throwaway script in the scratchpad, not committed) printing every aspect × tier and asserting the constraints.
@@ -259,7 +288,9 @@ Update `SPEC.md` (data model table, flows, scope list), add a line in `PLAN.md` 
 ---
 
 ## Open risks / verify during implementation
-- **`usage` presence for 2.5 models** and in batch output lines — confirm with one real call; handle null.
+- **`usage` in instant (streamed) responses** — confirmed for batch output lines; confirm for the streamed completed event with one real call; handle null.
+- **Batch price for 2.5** — verified 50% for Sunburst from billing. Flare has never been sent through Batch — if a Flare batch fails, disable Flare in Economy mode.
+- **4K 2048×2048 pricing anomaly** — the official table prices it above 3840×2160; recheck before trusting estimates there.
 - **Mask alpha convention** — confirm before Phase 9.
 - **`sharp` on Vercel with pnpm** — confirm the production build includes the native binary (check the deployment after Phase 4 is pushed).
 - **4K generation time** — `maxDuration = 300` on the routes; a 4K `max`-quality request could approach it. If it times out in testing, show a hint recommending Economy mode for 4K rather than raising limits.
