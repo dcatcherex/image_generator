@@ -184,7 +184,7 @@ export function Home({ readOnly }: { readOnly: boolean }) {
 
           <ScrollArea className="flex-1 min-h-0">
             {/* A disabled fieldset disables every control in the panel for viewers at once. */}
-            <fieldset disabled={readOnly} className="min-w-0 border-0 p-0 m-0">
+            <fieldset disabled={readOnly} className="h-full min-w-0 border-0 p-0 m-0">
             <GeneratePanel
               onImageCreated={handleImageCreated}
               onBatchSubmitted={handleBatchSubmitted}
