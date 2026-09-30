@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import type OpenAI from "openai";
 import { getOpenAI, MODEL } from "@/lib/openai";
 import { persistGeneratedImage } from "@/lib/save-image";
+import { actualSizeOr, usageToFields } from "@/lib/pricing";
 
 export const maxDuration = 300;
 
@@ -41,6 +42,7 @@ export async function POST(req: NextRequest) {
   const openai = getOpenAI();
 
   try {
+    const t0 = Date.now();
     const result = await openai.images.edit({
       model,
       image: files.length === 1 ? files[0] : files,
@@ -54,6 +56,7 @@ export async function POST(req: NextRequest) {
       stream: false,
     });
 
+    const durationMs = Date.now() - t0;
     const b64 = result.data?.[0]?.b64_json;
     if (!b64) {
       return NextResponse.json({ error: "No image data returned from OpenAI" }, { status: 502 });
@@ -64,13 +67,17 @@ export async function POST(req: NextRequest) {
       prompt,
       revisedPrompt: result.data?.[0]?.revised_prompt ?? null,
       model,
-      size,
+      size: actualSizeOr(size, result.size),
+      requestedSize: size,
       quality,
       format,
       background,
       sourceType: "edit",
       referenceImageIds,
       tag,
+      previewPartials: 0,
+      durationMs,
+      ...usageToFields(result.usage),
     });
 
     return NextResponse.json({ image });

@@ -3,6 +3,7 @@ import { getDb } from "@/db";
 import { batchJobs } from "@/db/schema";
 import { getOpenAI } from "@/lib/openai";
 import { persistGeneratedImage } from "@/lib/save-image";
+import { actualSizeOr, usageToFields } from "@/lib/pricing";
 import { TERMINAL_BATCH_STATUSES, parseBatchOutputJsonl } from "@/lib/batch";
 
 /**
@@ -86,12 +87,17 @@ export async function checkAndIngestPendingBatches(): Promise<{
                 prompt: meta.prompt,
                 revisedPrompt: line.response?.body?.data?.[0]?.revised_prompt ?? null,
                 model: meta.model,
-                size: meta.size,
+                size: actualSizeOr(meta.size, line.response?.body?.size),
+                requestedSize: meta.size,
                 quality: meta.quality,
                 format: meta.format,
                 background: meta.background,
                 sourceType: "generate",
                 tag: meta.tag,
+                previewPartials: 0,
+                // No duration for batch rows: queue time isn't generation time, and a null
+                // duration_ms is what keeps their discounted costs out of cost-stats.
+                ...usageToFields(line.response?.body?.usage, { batch: true }),
               });
               succeeded++;
             } catch (err) {

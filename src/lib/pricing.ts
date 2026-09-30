@@ -43,12 +43,13 @@ const COST_TABLE: Record<string, Record<string, number>> = {
   },
 };
 
-export function estimateCost(quality: string, size: string): number {
+export function estimateCost(quality: string, size: string, { partials = 0 }: { partials?: number } = {}): number {
   // "auto" has no fixed quality tier — OpenAI picks one at generation time — so we fall
   // back to the medium row as a reasonable midpoint estimate, matching prior behavior.
   const row = COST_TABLE[quality] ?? COST_TABLE.medium;
   const cost = row[size] ?? row["1024x1024"];
-  return Math.round(cost * 10000) / 10000;
+  // Streamed preview frames bill 100 output tokens each (see PARTIAL_IMAGE_TOKENS below).
+  return Math.round((cost + previewCostUsd(partials)) * 10000) / 10000;
 }
 
 // Approximate, manually-set USD→THB rate (not live-fetched — update this constant
@@ -59,4 +60,87 @@ const THB_PER_USD = 33;
 export function formatCostThb(usdCost: number): string {
   const thb = usdCost * THB_PER_USD;
   return `฿${thb.toFixed(2)}`;
+}
+
+// --- Actual cost from response `usage` ---------------------------------------------------
+// Rates and the 50% Batch factor are documented (with billing verification) in
+// src/docs/gpt-image-2.5-pricing-reference.md. Cached-input discounts don't apply to the
+// direct Images API, so they're ignored.
+const IMAGE_INPUT_USD_PER_M = 8;
+const TEXT_INPUT_USD_PER_M = 5;
+const IMAGE_OUTPUT_USD_PER_M = 30;
+
+/** OpenAI's Batch API discount for GPT Image 2.5 — verified at exactly 50% from billing
+ * (see the pricing doc's "Verifying the Batch price" section). */
+export const BATCH_PRICE_MULTIPLIER = 0.5;
+
+/** Each streamed partial image bills this many image output tokens. */
+export const PARTIAL_IMAGE_TOKENS = 100;
+
+/** Shape shared by the Images API response, the streamed completed event and batch output lines. */
+export type ImageUsage = {
+  input_tokens?: number;
+  input_tokens_details?: { image_tokens?: number; text_tokens?: number };
+  output_tokens?: number;
+};
+
+export type UsageFields = {
+  actualCost: number | null;
+  inputTokens: number | null;
+  inputImageTokens: number | null;
+  outputTokens: number | null;
+};
+
+const NO_USAGE: UsageFields = { actualCost: null, inputTokens: null, inputImageTokens: null, outputTokens: null };
+
+export function actualCostFromUsage(usage: ImageUsage, { batch = false }: { batch?: boolean } = {}): number {
+  const input = usage.input_tokens ?? 0;
+  const imageIn = usage.input_tokens_details?.image_tokens ?? 0;
+  const textIn = usage.input_tokens_details?.text_tokens ?? Math.max(input - imageIn, 0);
+  const usd =
+    (textIn * TEXT_INPUT_USD_PER_M +
+      imageIn * IMAGE_INPUT_USD_PER_M +
+      (usage.output_tokens ?? 0) * IMAGE_OUTPUT_USD_PER_M) /
+    1_000_000;
+  return usd * (batch ? BATCH_PRICE_MULTIPLIER : 1);
+}
+
+/**
+ * Turns a response `usage` into the columns stored on an image row. `usage` is optional
+ * everywhere (never assume the API returned it); pass `count` > 1 to split a multi-image
+ * response's tokens and cost evenly across its images.
+ */
+export function usageToFields(
+  usage: ImageUsage | null | undefined,
+  { batch = false, count = 1 }: { batch?: boolean; count?: number } = {}
+): UsageFields {
+  if (!usage || typeof usage.output_tokens !== "number") return NO_USAGE;
+  const split = (v: number | undefined) => (typeof v === "number" ? Math.round(v / count) : null);
+  return {
+    actualCost: actualCostFromUsage(usage, { batch }) / count,
+    inputTokens: split(usage.input_tokens),
+    inputImageTokens: split(usage.input_tokens_details?.image_tokens),
+    outputTokens: split(usage.output_tokens),
+  };
+}
+
+/** The size an image actually came back at, when the response reports a WxH string. */
+export function actualSizeOr(requested: string, reported: unknown): string {
+  return typeof reported === "string" && /^\d+x\d+$/.test(reported) ? reported : requested;
+}
+
+/** Cost line for an image: the recorded actual cost, else the stored estimate (prefixed "~"). */
+export function imageCostLabel(image: { actualCost: string | null; costEstimate: string | null }): string | null {
+  if (image.actualCost != null) return formatCostThb(Number(image.actualCost));
+  if (image.costEstimate != null) return `~${formatCostThb(Number(image.costEstimate))}`;
+  return null;
+}
+
+export function formatDuration(ms: number): string {
+  return `${(ms / 1000).toFixed(1)}s`;
+}
+
+/** USD billed for streaming `partials` preview frames. */
+export function previewCostUsd(partials: number): number {
+  return (partials * PARTIAL_IMAGE_TOKENS * IMAGE_OUTPUT_USD_PER_M) / 1_000_000;
 }

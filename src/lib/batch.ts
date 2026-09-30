@@ -2,6 +2,7 @@
 // results within up to 24h, no guarantee of speed). This is a separate, opt-in path from
 // the normal instant `/api/generate` flow; it never touches that flow's code.
 
+import type { ImageUsage } from "./pricing";
 import type { PromptInputs } from "./prompt-builder";
 
 export type BatchRequestMeta = {
@@ -55,6 +56,9 @@ export type BatchOutputLine = {
     request_id: string;
     body?: {
       data?: Array<{ b64_json?: string; revised_prompt?: string }>;
+      // Actual returned dimensions (differs from the request when size was "auto").
+      size?: string;
+      usage?: ImageUsage;
     };
   } | null;
   error: { code?: string; message?: string } | null;

@@ -13,6 +13,7 @@ import {
   SelectItem,
   SelectTrigger,
 } from "@/components/ui/select";
+import { formatDuration, imageCostLabel } from "@/lib/pricing";
 import { ASSIGNABLE_TAGS } from "@/lib/tags";
 import type { ImageRecord } from "@/lib/types";
 
@@ -135,6 +136,12 @@ export function ImageCard({
 
       <div className="absolute inset-x-0 bottom-0 p-2 flex flex-col gap-1.5 bg-gradient-to-t from-background/90 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
         <p className="text-[11px] line-clamp-2 text-foreground/90">{image.prompt}</p>
+        {imageCostLabel(image) && (
+          <p className="text-[10px] font-mono text-muted-foreground">
+            {imageCostLabel(image)}
+            {image.durationMs != null && ` · ${formatDuration(image.durationMs)}`}
+          </p>
+        )}
         <div className="flex gap-1">
           <Tooltip>
             <TooltipTrigger

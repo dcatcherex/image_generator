@@ -3,6 +3,10 @@ import { NextRequest } from "next/server";
 import { getOpenAI, MODEL } from "@/lib/openai";
 import { persistGeneratedImage } from "@/lib/save-image";
 import { sseStreamFromEvents } from "@/lib/sse";
+import { actualSizeOr, usageToFields, type ImageUsage } from "@/lib/pricing";
+
+// Streamed partial images requested when live preview is on (each bills 100 output tokens).
+const PREVIEW_PARTIALS = 2;
 
 export const maxDuration = 300;
 
@@ -20,6 +24,7 @@ export async function POST(req: NextRequest) {
     model = MODEL[0],
     n = 1,
     tag = null,
+    preview = false,
   } = body ?? {};
 
   if (!prompt || typeof prompt !== "string") {
@@ -41,6 +46,8 @@ export async function POST(req: NextRequest) {
     // persisted so the gallery fills in progressively. n === 1 keeps the original
     // live partial-preview streaming path unchanged.
     if (count === 1) {
+      const partials = preview ? PREVIEW_PARTIALS : 0;
+      const t0 = Date.now();
       const events = await openai.images.generate({
         model,
         prompt,
@@ -50,44 +57,66 @@ export async function POST(req: NextRequest) {
         background,
         n: 1,
         stream: true,
-        partial_images: 2,
+        partial_images: partials,
       });
 
-      let lastB64: string | null = null;
+      let finalB64: string | null = null;
+      let lastPartialB64: string | null = null;
       let revisedPrompt: string | null = null;
+      let usage: ImageUsage | null = null;
+      let reportedSize: unknown = null;
+      let durationMs: number | null = null;
 
       for await (const event of events as AsyncIterable<Record<string, unknown>>) {
         const b64 = (event.b64_json ?? event.partial_image_b64) as string | undefined;
         const idx = (event.partial_image_index ?? 0) as number;
         if (typeof event.revised_prompt === "string") revisedPrompt = event.revised_prompt;
-        if (b64) {
-          lastB64 = b64;
+
+        if (event.type === "image_generation.completed") {
+          // Stop the clock on the completed event: that's when the final bytes exist,
+          // before any Blob upload / DB insert time is added.
+          durationMs = Date.now() - t0;
+          if (b64) finalB64 = b64;
+          usage = (event.usage as ImageUsage | undefined) ?? null;
+          reportedSize = event.size;
+          // With preview on, keep showing the final frame while it uploads, as before.
+          if (b64 && preview) emit({ type: "partial", index: idx, b64 });
+        } else if (b64) {
+          lastPartialB64 = b64;
           emit({ type: "partial", index: idx, b64 });
         }
       }
 
-      if (!lastB64) {
+      const b64 = finalB64 ?? lastPartialB64;
+      if (!b64) {
         emit({ type: "error", message: "No image data returned from OpenAI" });
         return;
       }
+      durationMs ??= Date.now() - t0;
+      if (!usage) console.warn("generate: streamed completed event carried no usage");
 
       const image = await persistGeneratedImage({
-        b64: lastB64,
+        b64,
         prompt,
         revisedPrompt,
         model,
-        size,
+        size: actualSizeOr(size, reportedSize),
+        requestedSize: size,
         quality,
         format,
         background,
         sourceType: "generate",
         tag,
+        previewPartials: partials,
+        durationMs,
+        ...usageToFields(usage),
       });
 
       emit({ type: "done", image });
       return;
     }
 
+    const t0 = Date.now();
     const response = await openai.images.generate({
       model,
       prompt,
@@ -99,6 +128,7 @@ export async function POST(req: NextRequest) {
       stream: false,
     });
 
+    const durationMs = Date.now() - t0;
     const items = response.data ?? [];
     if (items.length === 0) {
       emit({ type: "error", message: "No image data returned from OpenAI" });
@@ -113,12 +143,17 @@ export async function POST(req: NextRequest) {
         prompt,
         revisedPrompt: item.revised_prompt ?? null,
         model,
-        size,
+        size: actualSizeOr(size, response.size),
+        requestedSize: size,
         quality,
         format,
         background,
         sourceType: "generate",
         tag,
+        previewPartials: 0,
+        durationMs,
+        // The response reports usage for the whole request; split it across the images.
+        ...usageToFields(response.usage, { count: items.length }),
       });
       emit({ type: "done", image, index: i, total: items.length });
     }

@@ -13,6 +13,7 @@ import {
   SelectItem,
   SelectTrigger,
 } from "@/components/ui/select";
+import { formatDuration, imageCostLabel } from "@/lib/pricing";
 import { ASSIGNABLE_TAGS } from "@/lib/tags";
 import type { ImageRecord } from "@/lib/types";
 
@@ -231,6 +232,20 @@ export function ImageLightbox({
           <Badge variant="outline" className="text-[10px]">{image.quality}</Badge>
           <Badge variant="outline" className="text-[10px]">{image.model}</Badge>
         </div>
+
+        {imageCostLabel(image) && (
+          <p className="text-xs font-mono text-muted-foreground">
+            {[
+              imageCostLabel(image),
+              image.durationMs != null ? formatDuration(image.durationMs) : null,
+              image.outputTokens != null
+                ? `${image.inputTokens ?? 0} in / ${image.outputTokens} out tokens`
+                : null,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+          </p>
+        )}
       </div>
       </ScrollArea>
       <div className="flex shrink-0 gap-1.5 border-t p-4">

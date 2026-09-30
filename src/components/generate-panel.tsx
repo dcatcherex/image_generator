@@ -26,15 +26,22 @@ import {
   QUALITY_OPTIONS,
   sizeFromAspectRatio,
 } from "@/lib/openai";
-import { estimateCost, formatCostThb } from "@/lib/pricing";
+import {
+  BATCH_PRICE_MULTIPLIER,
+  previewCostUsd,
+  estimateCost,
+  formatCostThb,
+} from "@/lib/pricing";
+import { useLivePreview } from "@/lib/use-live-preview";
 import { ASSIGNABLE_TAGS } from "@/lib/tags";
 import type { useImageStream } from "@/lib/use-image-stream";
 import type { PanelOptionVisibility } from "@/lib/use-panel-options";
 import type { ReferenceItem } from "@/lib/reference-items";
 import type { BatchJobRecord, ImageRecord } from "@/lib/types";
 
-// OpenAI's real Batch API discount, applied to the same estimateCost() number.
-const ECONOMY_DISCOUNT = 0.5;
+// Streamed preview frames requested by /api/generate when Live preview is on. Keep in sync
+// with PREVIEW_PARTIALS in src/app/api/generate/route.ts.
+const PREVIEW_PARTIALS = 2;
 
 // SelectValue in this codebase renders the raw selected value as its label (see how
 // "png"/"medium" etc. display verbatim elsewhere), so the "no tag" sentinel needs to be
@@ -110,8 +117,14 @@ export function GeneratePanel({
   const [maskEditorOpen, setMaskEditorOpen] = useState(false);
 
   const { generate, isGenerating, error } = generateStream;
+  const livePreview = useLivePreview();
 
   const isEditMode = referenceItems.length > 0;
+  // Only the instant single-image generate path streams; edits, batches (n > 1) and Economy
+  // mode never do, so they never pay for previews.
+  const previewApplies = !isEditMode && !economyMode && n === 1;
+  const previewOn = visibility.preview && livePreview.preview && previewApplies;
+  const partials = previewOn ? PREVIEW_PARTIALS : 0;
 
   const size = useMemo(() => {
     const selected = ASPECT_RATIOS.find((ar) => ar.label === aspectRatio);
@@ -119,15 +132,15 @@ export function GeneratePanel({
   }, [aspectRatio]);
 
   const draftCost = useMemo(() => {
-    const base = estimateCost(quality, size) * (isEditMode ? 1 : n);
-    return !isEditMode && economyMode ? base * ECONOMY_DISCOUNT : base;
-  }, [quality, size, isEditMode, n, economyMode]);
+    const base = estimateCost(quality, size, { partials }) * (isEditMode ? 1 : n);
+    return !isEditMode && economyMode ? base * BATCH_PRICE_MULTIPLIER : base;
+  }, [quality, size, partials, isEditMode, n, economyMode]);
 
   // Queued items are only submitted (and thus only priced) in Economy mode, so no
   // separate "instant" branch is needed here the way draftCost has one.
   const queueCost = useMemo(() => {
     if (isEditMode || !economyMode) return 0;
-    return queue.reduce((sum, item) => sum + estimateCost(item.quality, item.size) * item.n * ECONOMY_DISCOUNT, 0);
+    return queue.reduce((sum, item) => sum + estimateCost(item.quality, item.size) * item.n * BATCH_PRICE_MULTIPLIER, 0);
   }, [queue, isEditMode, economyMode]);
 
   const cost = draftCost + queueCost;
@@ -202,7 +215,7 @@ export function GeneratePanel({
     if (!isEditMode) {
       let created = 0;
       await generate(
-        { prompt, size, quality, format, background, model, n, tag: tagValue },
+        { prompt, size, quality, format, background, model, n, tag: tagValue, preview: previewOn },
         (image) => {
           onImageCreated(image);
           created++;
@@ -341,6 +354,22 @@ export function GeneratePanel({
               instead of appearing instantly.
             </TooltipContent>
           </Tooltip>
+        )}
+
+        {visibility.preview && previewApplies && (
+          <div className="flex items-center justify-between rounded-md border px-3 py-2">
+            <div className="flex flex-col">
+              <Label htmlFor="live-preview" className="text-sm">Live preview</Label>
+              <span className="text-xs text-muted-foreground">
+                +{formatCostThb(previewCostUsd(PREVIEW_PARTIALS))} per image
+              </span>
+            </div>
+            <Switch
+              id="live-preview"
+              checked={livePreview.preview}
+              onCheckedChange={(v) => livePreview.setPreview(Boolean(v))}
+            />
+          </div>
         )}
 
         {!isEditMode && economyMode && (
