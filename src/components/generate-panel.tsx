@@ -151,6 +151,7 @@ export function GeneratePanel({
   const [maskFile, setMaskFile] = useState<File | null>(null);
   const [maskOwnerKey, setMaskOwnerKey] = useState<string | null>(null);
   const [maskEditorOpen, setMaskEditorOpen] = useState(false);
+  const [compositeMask, setCompositeMask] = useState(true);
 
   const { generate, isGenerating, error } = generateStream;
   const livePreview = useLivePreview();
@@ -375,7 +376,10 @@ export function GeneratePanel({
         JSON.stringify(referenceItems.map((r) => r.sourceImageId).filter(Boolean))
       );
       referenceItems.forEach((item) => form.append("images", item.file));
-      if (activeMask) form.set("mask", activeMask);
+      if (activeMask) {
+        form.set("mask", activeMask);
+        if (!compositeMask) form.set("compositeMask", "false");
+      }
       if (activeParentId) form.set("parentImageId", activeParentId);
       if (tagValue) form.set("tag", tagValue);
 
@@ -456,7 +460,8 @@ export function GeneratePanel({
           <ReferenceImagesPicker items={referenceItems} onChange={setReferenceItems} />
 
           {maskableItem && (
-            <div className="flex items-center gap-2 rounded-md border px-3 py-2">
+            <div className="flex flex-col gap-1.5 rounded-md border px-3 py-2">
+            <div className="flex items-center gap-2">
               <Paintbrush2 className="size-3.5 text-muted-foreground shrink-0" />
               <span className="flex-1 text-xs text-muted-foreground">
                 {activeMask ? "Mask applied — only painted areas will change" : "No mask — the whole image may change"}
@@ -481,6 +486,18 @@ export function GeneratePanel({
                   Clear
                 </Button>
               )}
+            </div>
+            {activeMask && (
+              <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={compositeMask}
+                  onChange={(e) => setCompositeMask(e.target.checked)}
+                  className="size-3.5 accent-primary"
+                />
+                Keep unmasked area pixel-identical
+              </label>
+            )}
             </div>
           )}
         </div>

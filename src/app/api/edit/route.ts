@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import type OpenAI from "openai";
 import { getOpenAI, MODEL, normalizeCompression, validateFormatBackground, validateSize } from "@/lib/openai";
 import { buildPrompt, defaultReferenceRole, sanitizePromptInputs } from "@/lib/prompt-builder";
+import { compositeMaskedEdit } from "@/lib/mask-composite";
 import { persistGeneratedImage, transparencyWarning } from "@/lib/save-image";
 import { actualSizeOr, usageToFields } from "@/lib/pricing";
 
@@ -94,9 +95,32 @@ export async function POST(req: NextRequest) {
     });
 
     const durationMs = Date.now() - t0;
-    const b64 = result.data?.[0]?.b64_json;
+    let b64 = result.data?.[0]?.b64_json;
     if (!b64) {
       return NextResponse.json({ error: "No image data returned from OpenAI" }, { status: 502 });
+    }
+
+    // With a mask, paste the edited region back onto the original so everything the mask
+    // protects stays pixel-for-pixel as it was (on by default; compositeMask=false opts out).
+    let finalSize = actualSizeOr(size, result.size);
+    let compositeWarning: string | undefined;
+    if (mask instanceof File && form.get("compositeMask") !== "false") {
+      try {
+        const composed = await compositeMaskedEdit({
+          original: Buffer.from(await files[0].arrayBuffer()),
+          mask: Buffer.from(await mask.arrayBuffer()),
+          result: Buffer.from(b64, "base64"),
+          format,
+          compression,
+        });
+        b64 = composed.buffer.toString("base64");
+        // The composite has the original's dimensions, not whatever the model returned.
+        finalSize = `${composed.width}x${composed.height}`;
+      } catch (err) {
+        // Don't lose a paid generation over a compositing failure; save the raw output.
+        console.error("edit: mask compositing failed", err);
+        compositeWarning = "Mask compositing failed; saved the model's raw output instead";
+      }
     }
 
     const image = await persistGeneratedImage({
@@ -104,7 +128,7 @@ export async function POST(req: NextRequest) {
       prompt,
       revisedPrompt: result.data?.[0]?.revised_prompt ?? null,
       model,
-      size: actualSizeOr(size, result.size),
+      size: finalSize,
       requestedSize: size,
       quality,
       format,
@@ -121,7 +145,8 @@ export async function POST(req: NextRequest) {
       ...usageToFields(result.usage),
     });
 
-    return NextResponse.json({ image, warning: transparencyWarning(image) });
+    const warning = [compositeWarning, transparencyWarning(image)].filter(Boolean).join("; ") || undefined;
+    return NextResponse.json({ image, warning });
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Edit failed" },
