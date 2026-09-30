@@ -117,7 +117,9 @@ USD = (text_input_tokens × 5
      + image_output_tokens × 30) / 1,000,000
 ```
 
-Each streamed partial image adds 100 image output tokens, equivalent to $0.003 at the published rate. Include those tokens once when reconciling usage. This app's live preview requests 2 partial images (`partial_images: 2` in `/api/generate`), adding **$0.006 per instant image** — about +58% at `medium` 1024×1536 ($0.01029) and more than double at `low`. The preview is being made optional (see `ENHANCEMENTS.md`).
+Each streamed partial image adds 100 image output tokens, equivalent to $0.003 at the published rate. Include those tokens once when reconciling usage. This app's live preview requests 2 partial images (`partial_images: 2` in `/api/generate`), adding **$0.006 per instant image** — about +58% at `medium` 1024×1536 ($0.01029) and more than double at `low`. The preview is now optional and off by default.
+
+**Observed 2026-09-30:** two otherwise identical Sunburst `low` 1024×1024 generations reported `usage.output_tokens` of **196** with preview off (exactly the table value) and **273** with `partial_images: 2`, i.e. +77 tokens, not the documented +200. Possibly fewer partial frames were delivered for a fast `low` render, or `usage` doesn't count them the way billing does. The app still estimates +100 tokens per requested partial (the conservative, documented figure); reconcile against a Line Item cost export before changing it.
 
 ### Observed usage from this app
 

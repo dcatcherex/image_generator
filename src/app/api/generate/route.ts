@@ -79,7 +79,6 @@ export async function POST(req: NextRequest) {
         size,
         quality,
         output_format: format,
-      ...(compression != null ? { output_compression: compression } : {}),
         ...(compression != null ? { output_compression: compression } : {}),
         background,
         n: 1,

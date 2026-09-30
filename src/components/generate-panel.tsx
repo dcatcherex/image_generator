@@ -161,7 +161,7 @@ export function GeneratePanel({
   const [exactTextOpen, setExactTextOpen] = useState(false);
   const [pendingPreset, setPendingPreset] = useState<PromptPreset | null>(null);
 
-  const { generate, isGenerating, error } = generateStream;
+  const { generate, isGenerating } = generateStream;
   const livePreview = useLivePreview();
   const costStats = useCostStats();
 
@@ -312,7 +312,15 @@ export function GeneratePanel({
       // without requiring an explicit "Add to queue" click first for the common
       // single-prompt case.
       const draft = prompt.trim() ? [{ prompt, promptInputs, size, quality, format, background, compression, model, n, tag: tagValue }] : [];
-      const requests = [...queue.map(({ id: _id, ...rest }) => rest), ...draft];
+      // Strip the client-only queue id before sending.
+      const requests = [
+        ...queue.map((item) => {
+          const rest: Omit<QueuedPrompt, "id"> & { id?: string } = { ...item };
+          delete rest.id;
+          return rest;
+        }),
+        ...draft,
+      ];
       if (requests.length === 0) {
         toast.error("Add a prompt to the queue first");
         return;
@@ -352,7 +360,7 @@ export function GeneratePanel({
       const compareGroupId = crypto.randomUUID();
       const payload = { promptInputs, size, quality, format, background, compression, n: 1, tag: tagValue, preview: previewOn, compareGroupId };
       const results: ImageRecord[] = [];
-      await Promise.all(
+      const failures = await Promise.all(
         [generateStream, compareStream].map((stream, i) =>
           stream.generate({ ...payload, model: MODEL[i] }, (image, warning) => {
             onImageCreated(image);
@@ -365,15 +373,18 @@ export function GeneratePanel({
       if (results.length === MODEL.length) {
         // Order by MODEL so the dialog's left/right slots are stable.
         onCompareDone([...results].sort((a, b) => MODEL.indexOf(a.model as (typeof MODEL)[number]) - MODEL.indexOf(b.model as (typeof MODEL)[number])));
+      } else if (results.length > 0) {
+        const reason = failures.find(Boolean);
+        toast.error(`One of the two models failed — the other image was kept in the gallery${reason ? `: ${reason}` : ""}`);
       } else {
-        toast.error("One of the two models failed — the other image was kept in the gallery");
+        toast.error(failures.find(Boolean) ?? "Comparison failed");
       }
       return;
     }
 
     if (!isEditMode) {
       let created = 0;
-      await generate(
+      const failure = await generate(
         { promptInputs, size, quality, format, background, compression, model, n, tag: tagValue, preview: previewOn },
         (image, warning) => {
           onImageCreated(image);
@@ -382,8 +393,8 @@ export function GeneratePanel({
         }
       );
       costStats.refresh();
-      if (error) {
-        toast.error(error);
+      if (failure) {
+        toast.error(failure);
       } else if (created > 0) {
         toast.success(created > 1 ? `${created} images generated` : "Image generated");
       }
