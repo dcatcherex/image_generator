@@ -8,7 +8,6 @@ import { Gallery } from "@/components/gallery";
 import { CompareDialog } from "@/components/compare-dialog";
 import { HelpDialog } from "@/components/help-dialog";
 import { SettingsDialog } from "@/components/settings-dialog";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { cn } from "cn";
 import { ReadOnlyProvider } from "@/lib/read-only";
@@ -212,14 +211,12 @@ export function Home({ readOnly }: { readOnly: boolean }) {
             </p>
           )}
 
-          <ScrollArea className="flex-1 min-h-0">
-            {/* A disabled fieldset disables every control in the panel for viewers at once.
-                It is a flex column with min-h-full so the panel fills a tall pane but grows
-                (and scrolls) instead of being squashed when the pane is short. */}
-            <fieldset
-              disabled={readOnly}
-              className="mx-auto flex min-h-full w-full min-w-0 max-w-xl flex-col border-0 p-0 m-0 lg:max-w-none"
-            >
+          {/* A disabled fieldset disables every control in the panel for viewers at once.
+              The panel scrolls its own options and keeps the Generate footer pinned below. */}
+          <fieldset
+            disabled={readOnly}
+            className="mx-auto flex min-h-0 w-full min-w-0 max-w-xl flex-1 flex-col border-0 p-0 m-0 lg:max-w-none"
+          >
             <GeneratePanel
               onImageCreated={handleImageCreated}
               onBatchSubmitted={handleBatchSubmitted}
@@ -242,8 +239,7 @@ export function Home({ readOnly }: { readOnly: boolean }) {
               isEditing={isEditing}
               setIsEditing={setIsEditing}
             />
-            </fieldset>
-          </ScrollArea>
+          </fieldset>
         </aside>
 
         <div

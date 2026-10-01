@@ -448,9 +448,10 @@ export function GeneratePanel({
   }
 
   return (
-    // flex-1 (not h-full): the panel fills a tall pane but never shrinks below its content,
-    // so on short screens it scrolls instead of letting sections overlap.
-    <div className="flex flex-1 flex-col">
+    // The options scroll in their own region while the Generate footer stays outside it,
+    // pinned to the bottom of the pane at any height.
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
       <div className="flex flex-1 flex-col gap-4 p-4">
         <div className="flex flex-1 min-h-48 flex-col gap-1.5">
           {visibility.presets && (
@@ -847,26 +848,26 @@ export function GeneratePanel({
           </div>
         )}
 
-        {/* Pinned to the bottom of the scrolling pane so the primary action is always
-            reachable, however many options are expanded above it. */}
-        <div className="sticky bottom-0 z-10 -mx-4 -mb-4 border-t bg-background px-4 py-3">
-          <Button onClick={handleSubmit} disabled={busy} className="h-10 w-full justify-between gap-2 lg:h-9">
-            <span className="flex items-center gap-2">
-              {busy ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
-              {isEditMode
-                ? "Apply edit"
-                : economyMode
-                ? `Submit batch${queuedImageCount > 1 ? ` (${queuedImageCount})` : ""}`
-                : "Generate"}
-            </span>
-            <Badge
-              variant="outline"
-              className="font-mono text-[10px] border-primary-foreground/30 text-primary-foreground"
-            >
-              {costIsApproximate ? "~" : ""}{formatCostThb(cost)}
-            </Badge>
-          </Button>
-        </div>
+      </div>
+      </div>
+
+      <div className="shrink-0 border-t bg-background p-4 py-3">
+        <Button onClick={handleSubmit} disabled={busy} className="h-10 w-full justify-between gap-2 lg:h-9">
+          <span className="flex items-center gap-2">
+            {busy ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
+            {isEditMode
+              ? "Apply edit"
+              : economyMode
+              ? `Submit batch${queuedImageCount > 1 ? ` (${queuedImageCount})` : ""}`
+              : "Generate"}
+          </span>
+          <Badge
+            variant="outline"
+            className="font-mono text-[10px] border-primary-foreground/30 text-primary-foreground"
+          >
+            {costIsApproximate ? "~" : ""}{formatCostThb(cost)}
+          </Badge>
+        </Button>
       </div>
     </div>
   );
