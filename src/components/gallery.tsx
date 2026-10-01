@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { Clock, Heart, Loader2, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -19,6 +19,31 @@ type RenderItem =
   | { kind: "batchPending"; index: number }
   | { kind: "image"; image: ImageRecord };
 
+// Narrowest a tile may get before the grid drops a column. The saved "Columns" setting is a
+// preference for wide screens; on a phone or a narrow pane it would otherwise squeeze 5 tiles
+// into ~60px each.
+const MIN_TILE_PX = 140;
+const GRID_GAP_PX = 12;
+
+function useMaxColumns() {
+  // A callback ref (kept in state): the measured element is swapped between the grid, the
+  // masonry layout and the empty state, so an effect must re-run whenever it changes.
+  const [el, setEl] = useState<HTMLDivElement | null>(null);
+  const [maxColumns, setMaxColumns] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!el) return;
+    const observer = new ResizeObserver(([entry]) => {
+      const width = entry.contentRect.width;
+      setMaxColumns(Math.max(2, Math.floor((width + GRID_GAP_PX) / (MIN_TILE_PX + GRID_GAP_PX))));
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [el]);
+
+  return { ref: setEl, maxColumns };
+}
+
 export function Gallery({
   images,
   onDelete,
@@ -35,7 +60,7 @@ export function Gallery({
   pendingPreviews,
   pendingBatchJobs = [],
   view,
-  columns,
+  columns: preferredColumns,
 }: {
   images: ImageRecord[];
   onDelete: (image: ImageRecord) => void;
@@ -62,6 +87,8 @@ export function Gallery({
   const [searchOpen, setSearchOpen] = useState(false);
   const showSearchInput = searchOpen || query.length > 0;
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const { ref: scrollRef, maxColumns } = useMaxColumns();
+  const columns = maxColumns ? Math.min(preferredColumns, maxColumns) : preferredColumns;
 
   const filtered = useMemo(() => {
     return images.filter((img) => {
@@ -146,15 +173,17 @@ export function Gallery({
   }
 
   return (
-    <div className="flex flex-col gap-4 p-4 flex-1 min-h-0">
-      <div className="flex flex-wrap items-center justify-between gap-1.5">
-        <div className="flex flex-wrap items-center gap-1.5">
+    <div className="flex flex-col gap-3 p-3 sm:gap-4 sm:p-4 flex-1 min-h-0">
+      <div className="flex items-center justify-between gap-2">
+        {/* One scrollable row on narrow screens (wrapping into 3 rows of chips eats the
+            gallery); the bleed + padding keeps the focus ring and edge chips un-clipped. */}
+        <div className="-mx-1 flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto px-1 py-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {TAG_FILTER_OPTIONS.map((t) => (
             <Button
               key={t}
               variant={tagFilter === t ? "default" : "outline"}
               size="sm"
-              className="h-7 text-xs"
+              className="h-8 shrink-0 text-xs sm:h-7"
               onClick={() => setTagFilter(t)}
             >
               {t}
@@ -162,9 +191,9 @@ export function Gallery({
           ))}
         </div>
 
-        <div className="flex flex-wrap items-center gap-1.5">
+        <div className="flex shrink-0 items-center gap-1.5">
           {showSearchInput ? (
-            <div className="relative w-48">
+            <div className="relative w-36 sm:w-48">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
               <Input
                 autoFocus
@@ -180,13 +209,14 @@ export function Gallery({
                     setSearchOpen(false);
                   }
                 }}
-                className="pl-8 h-7"
+                className="pl-8 h-8 sm:h-7"
               />
             </div>
           ) : (
             <Button
               variant="outline"
               size="icon-sm"
+              className="size-8 sm:size-7"
               aria-label="Search by prompt"
               onClick={() => setSearchOpen(true)}
             >
@@ -196,21 +226,24 @@ export function Gallery({
           <Button
             variant={favoritesOnly ? "default" : "outline"}
             size="sm"
-            className="h-7 gap-1.5 text-xs"
+            className="h-8 gap-1.5 px-2.5 text-xs sm:h-7"
+            aria-label="Favorites"
+            aria-pressed={favoritesOnly}
             onClick={() => setFavoritesOnly(!favoritesOnly)}
           >
-            <Heart className="size-3.5" /> Favorites
+            <Heart className="size-3.5" />
+            <span className="hidden sm:inline">Favorites</span>
           </Button>
         </div>
       </div>
 
       {filtered.length === 0 && pendingPreviews.length === 0 && batchPendingCount === 0 ? (
         <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground">
-          No images yet. Generate your first one on the right.
+          No images yet. Generate your first one from the Create panel.
         </div>
       ) : view === "masonry" && masonryColumns ? (
         <ScrollArea className="flex-1 min-h-0">
-          <div className="flex gap-3 items-start pb-4">
+          <div ref={scrollRef} className="flex gap-3 items-start pb-4">
             {masonryColumns.map((column, i) => (
               <div key={i} className="flex flex-1 min-w-0 flex-col gap-3">
                 {column.map(renderCard)}
@@ -221,6 +254,7 @@ export function Gallery({
       ) : (
         <ScrollArea className="flex-1 min-h-0">
           <div
+            ref={scrollRef}
             className="grid gap-3 pb-4"
             style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
           >

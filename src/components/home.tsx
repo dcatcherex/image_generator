@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ImageIcon, MessageSquare } from "lucide-react";
+import { ImageIcon, Images, MessageSquare, Sparkles } from "lucide-react";
 import { UserButton } from "@clerk/nextjs";
 import { GeneratePanel } from "@/components/generate-panel";
 import { Gallery } from "@/components/gallery";
@@ -10,6 +10,7 @@ import { HelpDialog } from "@/components/help-dialog";
 import { SettingsDialog } from "@/components/settings-dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
+import { cn } from "cn";
 import { ReadOnlyProvider } from "@/lib/read-only";
 import { referenceItemFromImage, type ReferenceItem } from "@/lib/reference-items";
 import { useImageStream } from "@/lib/use-image-stream";
@@ -46,6 +47,9 @@ export function Home({ readOnly }: { readOnly: boolean }) {
   const [compareImages, setCompareImages] = useState<ImageRecord[] | null>(null);
   const galleryView = useGalleryView();
   const panelOptions = usePanelOptions();
+  // Below `lg` the panel and the gallery can't share the screen, so they become two tabs
+  // (both stay mounted, so the hidden one keeps its state, scroll position and any draft).
+  const [mobileTab, setMobileTab] = useState<"gallery" | "create">("gallery");
 
   useEffect(() => {
     fetch("/api/images")
@@ -86,6 +90,7 @@ export function Home({ readOnly }: { readOnly: boolean }) {
 
   function handleBatchSubmitted(job: BatchJobRecord) {
     setPendingBatchJobs((prev) => [job, ...prev]);
+    setMobileTab("gallery");
   }
 
   function handleImageCreated(image: ImageRecord) {
@@ -103,6 +108,7 @@ export function Home({ readOnly }: { readOnly: boolean }) {
   async function handleUseAsReference(image: ImageRecord) {
     const item = await referenceItemFromImage(image);
     setReferenceItems((prev) => [...prev, item]);
+    setMobileTab("create");
   }
 
   // Unlike "Use as reference" (which appends and sets no parent), Refine starts a fresh edit
@@ -115,6 +121,7 @@ export function Home({ readOnly }: { readOnly: boolean }) {
     setPreserve(image.promptInputs?.preserve ?? []);
     setParentImageId(image.id);
     setPrompt("");
+    setMobileTab("create");
     setTimeout(() => document.getElementById("prompt")?.focus(), 0);
   }
 
@@ -127,6 +134,7 @@ export function Home({ readOnly }: { readOnly: boolean }) {
     // plain generate image's prompt mid-edit doesn't wipe the chips the user just picked.
     if (inputs?.changeOnly != null) setChangeOnly(inputs.changeOnly);
     if (inputs?.preserve) setPreserve(inputs.preserve);
+    setMobileTab("create");
   }
 
   // One placeholder tile per image still expected from each active stream (the first tile of a
@@ -138,42 +146,64 @@ export function Home({ readOnly }: { readOnly: boolean }) {
   );
   if (isEditing && pendingPreviews.length === 0) pendingPreviews.push(null);
 
+  // When a generation starts, move a phone/tablet user to the gallery where its placeholder
+  // tile is. State is adjusted during render on the idle -> busy transition, not in an effect.
+  const [hadPending, setHadPending] = useState(false);
+  const hasPending = pendingPreviews.length > 0;
+  if (hasPending !== hadPending) {
+    setHadPending(hasPending);
+    if (hasPending) setMobileTab("gallery");
+  }
+
+  const header = (
+    <div className="flex items-center justify-between gap-2 px-4 h-14 border-b shrink-0">
+      <h1 className="flex items-center gap-2 font-medium">
+        <ImageIcon className="size-4" />
+        Image Studio
+      </h1>
+      <div className="flex items-center gap-1.5 sm:gap-3">
+        {FEEDBACK_URL && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-9 lg:size-8"
+            aria-label="Send feedback"
+            title="Send feedback"
+            nativeButton={false}
+            render={<a href={FEEDBACK_URL} target="_blank" rel="noreferrer" />}
+          >
+            <MessageSquare className="size-4" />
+          </Button>
+        )}
+        <HelpDialog />
+        <SettingsDialog
+          view={galleryView.view}
+          setView={galleryView.setView}
+          columns={galleryView.columns}
+          setColumns={galleryView.setColumns}
+          panelVisibility={panelOptions.visibility}
+          setPanelOptionVisible={panelOptions.setOptionVisible}
+        />
+        {!readOnly && <UserButton />}
+      </div>
+    </div>
+  );
+
   return (
     <ReadOnlyProvider value={readOnly}>
-    <div className="flex flex-col h-screen">
-      <div className="flex flex-col-reverse lg:flex-row-reverse flex-1 min-h-0">
-        <div className="lg:w-[340px] shrink-0 flex flex-col max-h-[45vh] lg:max-h-none lg:h-full min-h-0 border-b lg:border-b-0 lg:border-l bg-background">
-          <div className="flex items-center justify-between px-4 h-14 border-b shrink-0">
-            <h1 className="flex items-center gap-2">
-              <ImageIcon className="size-4" />
-              Image Studio
-            </h1>
-            <div className="flex items-center gap-3">
-              {FEEDBACK_URL && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="size-8"
-                  aria-label="Send feedback"
-                  title="Send feedback"
-                  nativeButton={false}
-                  render={<a href={FEEDBACK_URL} target="_blank" rel="noreferrer" />}
-                >
-                  <MessageSquare className="size-4" />
-                </Button>
-              )}
-              <HelpDialog />
-              <SettingsDialog
-                view={galleryView.view}
-                setView={galleryView.setView}
-                columns={galleryView.columns}
-                setColumns={galleryView.setColumns}
-                panelVisibility={panelOptions.visibility}
-                setPanelOptionVisible={panelOptions.setOptionVisible}
-              />
-              {!readOnly && <UserButton />}
-            </div>
-          </div>
+    <div className="flex flex-col h-dvh">
+      {/* Phone/tablet: the header spans the top; from `lg` it lives in the side panel. */}
+      <div className="lg:hidden">{header}</div>
+
+      <div className="flex flex-1 min-h-0 lg:flex-row-reverse">
+        <aside
+          className={cn(
+            "min-h-0 min-w-0 flex-1 flex-col bg-background",
+            "lg:flex lg:flex-none lg:w-[340px] xl:w-[380px] lg:border-l",
+            mobileTab === "create" ? "flex" : "hidden"
+          )}
+        >
+          <div className="hidden lg:block">{header}</div>
 
           {readOnly && (
             <p className="px-4 py-2 border-b text-xs text-muted-foreground bg-muted/50">
@@ -183,8 +213,13 @@ export function Home({ readOnly }: { readOnly: boolean }) {
           )}
 
           <ScrollArea className="flex-1 min-h-0">
-            {/* A disabled fieldset disables every control in the panel for viewers at once. */}
-            <fieldset disabled={readOnly} className="h-full min-w-0 border-0 p-0 m-0">
+            {/* A disabled fieldset disables every control in the panel for viewers at once.
+                It is a flex column with min-h-full so the panel fills a tall pane but grows
+                (and scrolls) instead of being squashed when the pane is short. */}
+            <fieldset
+              disabled={readOnly}
+              className="mx-auto flex min-h-full w-full min-w-0 max-w-xl flex-col border-0 p-0 m-0 lg:max-w-none"
+            >
             <GeneratePanel
               onImageCreated={handleImageCreated}
               onBatchSubmitted={handleBatchSubmitted}
@@ -209,33 +244,70 @@ export function Home({ readOnly }: { readOnly: boolean }) {
             />
             </fieldset>
           </ScrollArea>
-        </div>
+        </aside>
 
-        {loading ? (
-          <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground">
-            Loading gallery...
-          </div>
-        ) : (
-          <Gallery
-            images={images}
-            onDelete={handleDelete}
-            onImageUpdated={handleImageUpdated}
-            onUseAsReference={handleUseAsReference}
-            onUseAsPrompt={handleUseAsPrompt}
-            onRefine={handleRefine}
-            query={query}
-            setQuery={setQuery}
-            favoritesOnly={favoritesOnly}
-            setFavoritesOnly={setFavoritesOnly}
-            tagFilter={tagFilter}
-            setTagFilter={setTagFilter}
-            pendingPreviews={pendingPreviews}
-            pendingBatchJobs={pendingBatchJobs}
-            view={galleryView.view}
-            columns={galleryView.columns}
-          />
-        )}
+        <div
+          className={cn(
+            "min-h-0 min-w-0 flex-1 flex-col lg:flex",
+            mobileTab === "gallery" ? "flex" : "hidden"
+          )}
+        >
+          {loading ? (
+            <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground">
+              Loading gallery...
+            </div>
+          ) : (
+            <Gallery
+              images={images}
+              onDelete={handleDelete}
+              onImageUpdated={handleImageUpdated}
+              onUseAsReference={handleUseAsReference}
+              onUseAsPrompt={handleUseAsPrompt}
+              onRefine={handleRefine}
+              query={query}
+              setQuery={setQuery}
+              favoritesOnly={favoritesOnly}
+              setFavoritesOnly={setFavoritesOnly}
+              tagFilter={tagFilter}
+              setTagFilter={setTagFilter}
+              pendingPreviews={pendingPreviews}
+              pendingBatchJobs={pendingBatchJobs}
+              view={galleryView.view}
+              columns={galleryView.columns}
+            />
+          )}
+        </div>
       </div>
+
+      <nav
+        role="tablist"
+        aria-label="Workspace"
+        className="lg:hidden grid shrink-0 grid-cols-2 border-t bg-background pb-[env(safe-area-inset-bottom)]"
+      >
+        {(
+          [
+            { id: "gallery", label: "Gallery", icon: Images },
+            { id: "create", label: "Create", icon: Sparkles },
+          ] as const
+        ).map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            role="tab"
+            aria-selected={mobileTab === tab.id}
+            onClick={() => setMobileTab(tab.id)}
+            className={cn(
+              "flex h-14 items-center justify-center gap-2 text-sm font-medium transition-colors",
+              mobileTab === tab.id
+                ? "text-foreground border-t-2 border-primary -mt-px"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <tab.icon className="size-4" />
+            {tab.label}
+          </button>
+        ))}
+      </nav>
 
       {compareImages && (
         <CompareDialog

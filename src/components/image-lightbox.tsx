@@ -74,7 +74,7 @@ export function ImageLightbox({
   }, []);
 
   useEffect(() => {
-    activeThumbRef.current?.scrollIntoView({ block: "nearest" });
+    activeThumbRef.current?.scrollIntoView({ block: "nearest", inline: "nearest" });
   }, [index]);
 
   // Wraps around at both ends so scrolling feels continuous, like the reference site's
@@ -150,8 +150,8 @@ export function ImageLightbox({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex bg-background/95 backdrop-blur-sm" onWheel={handleWheel}>
-      <div className="relative flex flex-1 items-center justify-center p-4 lg:p-8">
+    <div className="fixed inset-0 z-50 flex flex-col bg-background/95 backdrop-blur-sm lg:flex-row" onWheel={handleWheel}>
+      <div className="relative flex min-h-0 flex-1 items-center justify-center p-3 pt-14 sm:p-4 sm:pt-14 lg:p-8">
         <div className="absolute top-3 right-3 z-10 flex items-center gap-2">
           {!readOnly && (
           <>
@@ -236,7 +236,7 @@ export function ImageLightbox({
         )}
       </div>
 
-      <div className="flex w-[280px] shrink-0 flex-col border-l bg-background">
+      <div className="order-3 flex max-h-[40dvh] shrink-0 flex-col border-t bg-background lg:order-none lg:max-h-none lg:w-[280px] lg:border-l lg:border-t-0">
       <ScrollArea className="flex-1 min-h-0">
       <div className="flex flex-col gap-4 p-4">
         <div className="flex items-center gap-2">
@@ -325,15 +325,14 @@ export function ImageLightbox({
       )}
       </div>
 
-      <div className="flex w-20 shrink-0 flex-col border-l bg-background">
-      <ScrollArea className="flex-1 min-h-0">
-      <div className="flex flex-col gap-1.5 p-2">
+      <div className="order-2 flex shrink-0 border-t bg-background lg:order-none lg:w-20 lg:flex-col lg:border-l lg:border-t-0">
+      <div className="flex flex-1 gap-1.5 overflow-x-auto p-2 lg:flex-col lg:overflow-y-auto lg:overflow-x-hidden">
         {images.map((img, i) => (
           <button
             key={img.id}
             ref={i === index ? activeThumbRef : undefined}
             onClick={() => onIndexChange(i)}
-            className={`relative aspect-square shrink-0 overflow-hidden rounded-md border ${
+            className={`relative size-14 shrink-0 overflow-hidden rounded-md border lg:size-auto lg:aspect-square ${
               i === index ? "ring-2 ring-primary" : "opacity-70 hover:opacity-100"
             }`}
           >
@@ -341,7 +340,6 @@ export function ImageLightbox({
           </button>
         ))}
       </div>
-      </ScrollArea>
       </div>
       <ConfirmDeleteDialog
         image={image}
