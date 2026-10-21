@@ -503,7 +503,7 @@ export function BrandsDialog({
                   />
                 </Field>
 
-                <Field label="Logos" hint={isNew ? "Save the brand first to add logos." : "PNG, JPEG or WebP, up to 4 MB."}>
+                <Field label="Logos" hint={isNew ? "Save the brand first to add logos." : "Drop or upload a PNG, JPEG or WebP, up to 4 MB. Dropping on a logo replaces it."}>
                   <div className="grid grid-cols-3 gap-3">
                     {LOGO_VARIANTS.map((variant) => (
                       <LogoSlot
@@ -703,6 +703,13 @@ function ImportPanel({
   );
 }
 
+// Same formats the logos route accepts (it sends logos on to the edit endpoint).
+const LOGO_TYPES = ["image/png", "image/jpeg", "image/webp"];
+
+function isLogoFile(file: File): boolean {
+  return LOGO_TYPES.includes(file.type);
+}
+
 function LogoSlot({
   variant,
   url,
@@ -719,13 +726,21 @@ function LogoSlot({
   onRemove: () => void;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
+  // Dropping onto a filled slot replaces that variant, same as its Replace button.
+  const { isDraggingOver, dropProps } = useFileDrop({
+    accept: isLogoFile,
+    onFiles: (files) => onUpload(files[0]),
+    disabled,
+  });
   return (
     <div className="flex flex-col gap-1.5">
       <div
+        {...dropProps}
         className={cn(
-          "relative flex aspect-square items-center justify-center overflow-hidden rounded-lg border",
+          "relative flex aspect-square items-center justify-center overflow-hidden rounded-lg border transition-shadow",
           // Show each variant on the background it's meant for.
-          variant === "on-dark" ? "bg-neutral-900" : "bg-white"
+          variant === "on-dark" ? "bg-neutral-900" : "bg-white",
+          isDraggingOver && "ring-2 ring-primary ring-offset-1"
         )}
       >
         {url ? (
@@ -738,7 +753,7 @@ function LogoSlot({
             className="flex size-full flex-col items-center justify-center gap-1 text-xs text-neutral-500 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Upload className="size-4" />
-            Upload
+            Drop or upload
           </button>
         )}
         {loading && (
@@ -775,7 +790,7 @@ function LogoSlot({
       <input
         ref={fileRef}
         type="file"
-        accept="image/png,image/jpeg,image/webp"
+        accept={LOGO_TYPES.join(",")}
         className="hidden"
         onChange={(e) => {
           const file = e.target.files?.[0];
