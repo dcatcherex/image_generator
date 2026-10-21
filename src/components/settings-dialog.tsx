@@ -67,8 +67,8 @@ export function SettingsDialog({
         className="max-w-[calc(100%-2rem)] gap-0 overflow-hidden p-0 sm:max-w-2xl"
       >
         <DialogTitle className="sr-only">Settings</DialogTitle>
-        <div className="flex h-[420px]">
-          <div className="flex w-40 shrink-0 flex-col gap-1 border-r bg-muted/40 p-3 sm:w-48">
+        <div className="flex h-[min(420px,80dvh)]">
+          <div className="hidden w-48 shrink-0 flex-col gap-1 border-r bg-muted/40 p-3 sm:flex">
             <span className="px-2 pb-2 text-xs font-medium text-muted-foreground">
               Settings
             </span>

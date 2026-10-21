@@ -499,9 +499,12 @@ export function GeneratePanel({
   }
 
   return (
-    <div className="flex flex-col h-full min-h-0">
-      <div className="flex flex-1 min-h-0 flex-col gap-4 p-4">
-        <div className="flex flex-1 min-h-24 flex-col gap-1.5">
+    // The options scroll in their own region while the Generate footer stays outside it,
+    // pinned to the bottom of the pane at any height.
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+      <div className="flex flex-1 flex-col gap-4 p-4">
+        <div className="flex flex-1 min-h-48 flex-col gap-1.5">
           {visibility.presets && (
             <div className="flex flex-col gap-1.5">
               {/* Always controlled to "no selection" so the same preset can be picked twice. */}
@@ -559,7 +562,7 @@ export function GeneratePanel({
                 ? "Describe how to change the reference image(s)..."
                 : "A children's book illustration of a fox reading under a lantern..."
             }
-            className="field-sizing-fixed h-full flex-1 resize-none overflow-y-auto"
+            className="field-sizing-fixed h-full min-h-28 flex-1 resize-none overflow-y-auto"
           />
           {visibility.exactText && (
             <div className="flex shrink-0 flex-col gap-1.5">
@@ -808,7 +811,9 @@ export function GeneratePanel({
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-3">
+        {/* Three columns only while the panel is a wide single column (tablet tabs); the
+            340px desktop sidebar stays at two. */}
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-2">
           {!usesEditEndpoint && visibility.batch && (
             <div className="flex flex-col gap-1.5">
               <Label>Batch (n)</Label>
@@ -932,7 +937,11 @@ export function GeneratePanel({
           </div>
         )}
 
-        <Button onClick={handleSubmit} disabled={busy} className="w-full gap-2 justify-between">
+      </div>
+      </div>
+
+      <div className="shrink-0 border-t bg-background p-4 py-3">
+        <Button onClick={handleSubmit} disabled={busy} className="h-10 w-full justify-between gap-2 lg:h-9">
           <span className="flex items-center gap-2">
             {busy ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
             {isEditMode
