@@ -1,5 +1,6 @@
 import {
   DEFAULT_BRAND_LANGUAGE,
+  MAX_COLORS,
   EMPTY_BRAND_KIT,
   sanitizeBrandKit,
   type BrandColor,
@@ -41,7 +42,8 @@ const HEADINGS: Array<[RegExp, Field]> = [
   [/^(colou?rs?|palette|colou?r palette|brand colou?rs?)$/, "colors"],
   [/^(do'?s?|don'?t'?s?)( (and|&) (do'?s?|don'?t'?s?))?$/, "dosDonts"],
   [/(typography|type|fonts?|typeface)/, "typeFeel"],
-  [/(style|mood|look|visual|imagery|tone)/, "style"],
+  // DESIGN.md files usually describe the overall feel in an "Overview" intro.
+  [/(style|mood|look|visual|imagery|tone|overview|personality|aesthetic|identity|^brand$)/, "style"],
   [/(standing text|contact|footer|fixed text)/, "standingText"],
   [/^notes?$/, "notes"],
 ];
@@ -68,7 +70,8 @@ function parseColor(line: string): BrandColor | null {
   const parts = stripBullet(line.replace(m[0], " "))
     .replace(/[*`_]/g, "")
     .split(/\s+[—–-]\s+|\s*[|:]\s*|\s*[()]\s*/)
-    .map((p) => p.trim())
+    // A separator left touching a chunk (e.g. "Name: #hex — note") isn't part of its text.
+    .map((p) => p.replace(/^[—–-]+\s*|\s*[—–-]+$/g, "").trim())
     .filter(Boolean);
   const [role = "", ...rest] = parts;
   const note = rest.join(", ");
@@ -80,8 +83,13 @@ function isDont(item: string): boolean {
   return /^(?:\**\s*)?(?:don'?t|do not|avoid|never|no\b|❌|✗|✘|⛔)/i.test(item);
 }
 
+// The list it lands in already says do or don't, so a leading "Do" / "Don't:" is dropped.
 function cleanListItem(item: string): string {
-  return item.replace(/^(?:\**\s*)?(?:(?:do(?:n'?t| not)?|avoid)\s*\**\s*:|don'?t\b|do not\b)\s*/i, "").replace(/^[✅✓✔❌✗✘⛔]\s*/u, "").trim();
+  const cleaned = item
+    .replace(/^[✅✓✔❌✗✘⛔]\s*/u, "")
+    .replace(/^(?:\**\s*)?(?:(?:do(?:n'?t| not)?|avoid)\s*\**\s*:|don'?t\b|do not\b|do\b)\s*/i, "")
+    .trim();
+  return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
 }
 
 export function parseDesignMd(markdown: string): ParsedBrand {
@@ -114,8 +122,8 @@ export function parseDesignMd(markdown: string): ParsedBrand {
       language = lang[1];
       continue;
     }
-    if (!line.trim() || /^\s*\|?[\s:-]+\|[\s|:-]*$/.test(line)) {
-      // Blank lines only matter inside free text; table separator rows never do.
+    if (!line.trim() || /^\s*\|?[\s:-]+\|[\s|:-]*$/.test(line) || /^\s*([-*_])(\s*\1){2,}\s*$/.test(line)) {
+      // Blank lines only matter inside free text; table separators and --- rules never do.
       if (!line.trim() && field && field !== "colors") pushText(field, "");
       continue;
     }
@@ -153,6 +161,12 @@ export function parseDesignMd(markdown: string): ParsedBrand {
   function pushText(f: Field, line: string) {
     if (f === "typeFeel" || f === "style" || f === "standingText") (text[f] ??= []).push(line);
     else if (f === "notes") notes.push(line);
+  }
+
+  // Colours past the kit's limit would be dropped by sanitizeBrandKit, so keep them in Notes.
+  const extra = kit.colors.splice(MAX_COLORS);
+  if (extra.length) {
+    notes.push("", "More colours:", ...extra.map((c) => `- \`${c.hex}\` ${c.role}${c.note ? ` — ${c.note}` : ""}`));
   }
 
   const join = (ls: string[] = []) => ls.join("\n").replace(/\n{3,}/g, "\n\n").trim();

@@ -32,6 +32,7 @@ import {
   DEFAULT_BRAND_LANGUAGE,
   EMPTY_BRAND_KIT,
   LOGO_VARIANTS,
+  MAX_COLORS,
   type BrandKit,
   type BrandRecord,
   type LogoVariant,
@@ -39,8 +40,6 @@ import {
 import { brandToDesignMd, parseDesignMd, type ParsedBrand } from "@/lib/brand-design-md";
 import { cn } from "cn";
 
-// Keep in sync with MAX_COLORS in src/lib/brands.ts (the server drops extras silently).
-const MAX_COLORS = 12;
 const HEX = /^#[0-9a-f]{6}$/i;
 
 const LOGO_LABELS: Record<LogoVariant, string> = {

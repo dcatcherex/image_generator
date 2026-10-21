@@ -44,7 +44,7 @@ export const EMPTY_BRAND_KIT: BrandKit = {
 
 export const DEFAULT_BRAND_LANGUAGE = "Thai";
 
-const MAX_COLORS = 12;
+export const MAX_COLORS = 12;
 const MAX_LIST = 20;
 const HEX = /^#[0-9a-f]{6}$/i;
 
