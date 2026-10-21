@@ -92,7 +92,7 @@ An edit preset "Re-skin to brand" (requires an active brand): source image = `su
 
 ### API
 
-- `GET/POST /api/brands`, `PATCH/DELETE /api/brands/[id]` (`DELETE?permanent=1` for hard delete), `POST /api/brands/[id]/logos` (Blob upload). All `requireOwner()`.
+- `GET/POST /api/brands`, `PATCH/DELETE /api/brands/[id]` (`DELETE?permanent=true` for hard delete; `GET ?archived=true` includes archived), `POST /api/brands/[id]/logos` (Blob upload). All `requireOwner()`.
 - `GET /api/brands/[id]/design-md` export; import = POST with markdown body, parsed best-effort into fields (unparsed content goes to `notes`).
 - `/api/generate`, `/api/edit`, `/api/batch`: accept `brandId` + `include` + `logoVariant`; set `images.brand_id`.
 - `GET /api/images?brand=<id|none>` filter: only honoured for the owner. Strip `brandId` / `prompt_inputs.brand` from responses for non-owners.

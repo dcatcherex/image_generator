@@ -32,6 +32,12 @@ export function rowToImageRecord(row: ImageRow): ImageRecord {
     promptInputs: row.promptInputs,
     referenceRoles: row.referenceRoles,
     compareGroupId: row.compareGroupId,
+    brandId: row.brandId,
     createdAt: row.createdAt.toISOString(),
   };
+}
+
+/** Brands are owner-only, so public viewers get records with brand fields removed. */
+export function publicImageRecord(record: ImageRecord): ImageRecord {
+  return { ...record, brandId: null };
 }

@@ -1,5 +1,6 @@
 import { pgTable, uuid, text, boolean, timestamp, numeric, jsonb, integer } from "drizzle-orm/pg-core";
 import type { BatchRequestMeta } from "@/lib/batch";
+import type { BrandKit, BrandLogo } from "@/lib/brands";
 import type { PromptInputs, ReferenceRole } from "@/lib/prompt-builder";
 
 export const images = pgTable("images", {
@@ -46,11 +47,32 @@ export const images = pgTable("images", {
   referenceRoles: jsonb("reference_roles").$type<Array<{ role: ReferenceRole; note?: string }>>(),
   // Shared by the two images of a model comparison.
   compareGroupId: uuid("compare_group_id"),
+  // Brand kit this image belongs to (BRANDS.md). Not a FK: archiving keeps it, and a
+  // permanent brand delete nulls it explicitly.
+  brandId: uuid("brand_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 export type ImageRow = typeof images.$inferSelect;
 export type NewImageRow = typeof images.$inferInsert;
+
+// Brand kits (BRANDS.md). Owner-only; archived brands are hidden from the switcher but keep
+// their images.
+export const brands = pgTable("brands", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  kit: jsonb("kit").$type<BrandKit>().notNull(),
+  // Language for rendered text, e.g. "Thai".
+  language: text("language").notNull().default("Thai"),
+  // At most one logo per variant (primary / on-dark / icon).
+  logos: jsonb("logos").$type<BrandLogo[]>().notNull().default([]),
+  archivedAt: timestamp("archived_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type BrandRow = typeof brands.$inferSelect;
+export type NewBrandRow = typeof brands.$inferInsert;
 
 // "Economy mode" batch jobs (OpenAI Batch API — async, ~50% cheaper, up to 24h turnaround).
 // Deliberately a separate table from `images`: a batch job has its own lifecycle (spans

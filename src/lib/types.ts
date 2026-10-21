@@ -29,6 +29,8 @@ export type ImageRecord = {
   promptInputs: PromptInputs | null;
   referenceRoles: Array<{ role: ReferenceRole; note?: string }> | null;
   compareGroupId: string | null;
+  // Owner-only: always null in responses to public viewers (see publicImageRecord).
+  brandId: string | null;
   createdAt: string;
 };
 

@@ -3,8 +3,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { del } from "@vercel/blob";
 import { getDb } from "@/db";
-import { images } from "@/db/schema";
+import { brands, images } from "@/db/schema";
 import { rowToImageRecord } from "@/lib/image-record";
+import { isUuid } from "@/lib/brands";
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const denied = await requireOwner();
@@ -20,6 +21,18 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     // null/empty clears the tag; ASSIGNABLE_TAGS validation happens client-side (fixed
     // select), so we just trust the value here rather than re-importing the list server-side.
     updates.tag = body.tag ? String(body.tag) : null;
+  }
+  if ("brandId" in body) {
+    // null clears it. Unlike tags, brands are rows, so check it exists (archived is fine).
+    if (body.brandId == null) {
+      updates.brandId = null;
+    } else {
+      const [brand] = isUuid(body.brandId)
+        ? await db.select({ id: brands.id }).from(brands).where(eq(brands.id, body.brandId))
+        : [];
+      if (!brand) return NextResponse.json({ error: "Unknown brand" }, { status: 400 });
+      updates.brandId = brand.id;
+    }
   }
 
   const [row] = await db
