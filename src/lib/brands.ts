@@ -19,6 +19,12 @@ export type BrandKit = {
 export const LOGO_VARIANTS = ["primary", "on-dark", "icon"] as const;
 export type LogoVariant = (typeof LOGO_VARIANTS)[number];
 
+export const LOGO_LABELS: Record<LogoVariant, string> = {
+  primary: "Primary",
+  "on-dark": "On dark",
+  icon: "Icon",
+};
+
 export type BrandLogo = { variant: LogoVariant; blobUrl: string; blobPathname: string };
 
 export type BrandRecord = {

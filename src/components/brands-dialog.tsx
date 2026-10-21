@@ -31,6 +31,7 @@ import { BrandDot } from "@/components/brand-switcher";
 import {
   DEFAULT_BRAND_LANGUAGE,
   EMPTY_BRAND_KIT,
+  LOGO_LABELS,
   LOGO_VARIANTS,
   MAX_COLORS,
   type BrandKit,
@@ -43,11 +44,6 @@ import { cn } from "cn";
 
 const HEX = /^#[0-9a-f]{6}$/i;
 
-const LOGO_LABELS: Record<LogoVariant, string> = {
-  primary: "Primary",
-  "on-dark": "On dark",
-  icon: "Icon",
-};
 
 const LANGUAGE_SUGGESTIONS = ["Thai", "English", "Thai and English"];
 

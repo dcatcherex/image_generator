@@ -13,7 +13,10 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -45,7 +48,8 @@ import {
   type PreserveId,
   type PromptInputs,
 } from "@/lib/prompt-builder";
-import { PROMPT_PRESETS, type PromptPreset } from "@/lib/prompt-presets";
+import { PROMPT_PRESETS, presetScaffold, type PromptPreset } from "@/lib/prompt-presets";
+import { BrandChips } from "@/components/brand-chips";
 import { useCostStats } from "@/lib/use-cost-stats";
 import { useLivePreview } from "@/lib/use-live-preview";
 import { ASSIGNABLE_TAGS } from "@/lib/tags";
@@ -154,10 +158,9 @@ export function GeneratePanel({
   const [tag, setTag] = useState<string>(NO_TAG);
   const [economyModeOn, setEconomyMode] = useState(false);
   const [compareToggle, setCompareToggle] = useState(false);
-  // Which brand parts to apply. The chip row that edits these (and picks the logo variant)
-  // comes with the social presets; until then the BRANDS.md defaults apply.
-  const [brandInclude] = useState<BrandInclude>(DEFAULT_BRAND_INCLUDE);
-  const [logoVariant] = useState<LogoVariant | null>(null);
+  // Which parts of the active brand to apply (the chip row); social presets set their own.
+  const [brandInclude, setBrandInclude] = useState<BrandInclude>(DEFAULT_BRAND_INCLUDE);
+  const [logoVariant, setLogoVariant] = useState<LogoVariant>("primary");
   // Hiding the Economy switch also turns the mode off, so a hidden toggle can't silently
   // keep routing generations through the slow batch path.
   const economyMode = visibility.economy && economyModeOn;
@@ -177,17 +180,24 @@ export function GeneratePanel({
 
   const isEditMode = referenceItems.length > 0;
 
-  // Economy mode only reaches the generations endpoint, which takes no input images, so the
-  // logo drops out there. Otherwise a logo makes this an edit-endpoint request (BRANDS.md).
-  const logoOn = Boolean(
-    activeBrand && brandInclude.logo && !economyMode && activeBrand.logos.length > 0
-  );
+  const maskableItem = referenceItems.length === 1 ? referenceItems[0] : null;
+  const activeMask = maskableItem && maskableItem.key === maskOwnerKey ? maskFile : null;
+
+  // Economy mode only reaches the generations endpoint, which takes no input images, and a
+  // mask needs a single input image, so the logo drops out for both. Otherwise a logo makes
+  // this an edit-endpoint request (BRANDS.md).
+  const logoBlocked = economyMode
+    ? "The logo isn't available in Economy mode"
+    : activeMask
+    ? "The logo can't be used together with a mask"
+    : null;
+  const logoOn = Boolean(activeBrand && brandInclude.logo && !logoBlocked && activeBrand.logos.length > 0);
   const usesEditEndpoint = isEditMode || logoOn;
   const brandRequest = activeBrand
     ? {
         id: activeBrand.id,
         include: { ...brandInclude, logo: logoOn },
-        ...(logoOn && logoVariant ? { logoVariant } : {}),
+        ...(logoOn ? { logoVariant } : {}),
       }
     : null;
 
@@ -255,9 +265,6 @@ export function GeneratePanel({
 
   const queuedImageCount = queue.reduce((sum, item) => sum + item.n, 0) + (!isEditMode && economyMode && prompt.trim() ? n : 0);
 
-  const maskableItem = referenceItems.length === 1 ? referenceItems[0] : null;
-  const activeMask = maskableItem && maskableItem.key === maskOwnerKey ? maskFile : null;
-
   const busy = isGenerating || compareStream.isGenerating || isEditing || isSubmittingBatch;
 
   // What the server assembles the final prompt from (see buildPrompt); more fields join in
@@ -280,7 +287,7 @@ export function GeneratePanel({
 
   function applyPreset(preset: PromptPreset) {
     const p = preset.params ?? {};
-    setPrompt(preset.scaffold);
+    setPrompt(presetScaffold(preset, activeBrand?.language ?? null));
     if (p.aspect) setAspectRatio(p.aspect);
     if (p.tier) setTier(p.tier);
     if (p.quality) setQuality(p.quality);
@@ -289,6 +296,7 @@ export function GeneratePanel({
     if (p.format) setFormat(p.format);
     if (p.background) setBackgroundState(p.background);
     if (preset.mode === "edit" && preset.preserve) setPreserve(preset.preserve);
+    if (activeBrand && preset.brandInclude) setBrandInclude(preset.brandInclude);
     setPendingPreset(null);
     const details = [
       p.quality && `quality ${p.quality}`,
@@ -296,6 +304,8 @@ export function GeneratePanel({
       p.tier,
       p.background === "transparent" && "transparent",
       p.format && p.format.toUpperCase(),
+      activeBrand && preset.brandInclude?.logo && "logo on",
+      activeBrand && preset.brandInclude?.standingText && "standing text on",
     ].filter(Boolean);
     toast.success(`Applied preset: ${preset.label}${details.length ? ` (${details.join(", ")})` : ""}`);
   }
@@ -485,9 +495,20 @@ export function GeneratePanel({
                   <SelectValue placeholder={isEditMode ? "Edit presets…" : "Presets…"} />
                 </SelectTrigger>
                 <SelectContent>
-                  {PROMPT_PRESETS.filter((x) => x.mode === (isEditMode ? "edit" : "generate")).map((x) => (
+                  {PROMPT_PRESETS.filter((x) => x.mode === (isEditMode ? "edit" : "generate") && !x.group).map((x) => (
                     <SelectItem key={x.id} value={x.id}>{x.label}</SelectItem>
                   ))}
+                  {!isEditMode && (
+                    <>
+                      <SelectSeparator />
+                      <SelectGroup>
+                        <SelectLabel>Social posts</SelectLabel>
+                        {PROMPT_PRESETS.filter((x) => x.group === "social").map((x) => (
+                          <SelectItem key={x.id} value={x.id}>{x.label}</SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </>
+                  )}
                 </SelectContent>
               </Select>
               {pendingPreset && (
@@ -558,6 +579,16 @@ export function GeneratePanel({
         </div>
 
         <div className="shrink-0 flex flex-col gap-2">
+          {activeBrand && (
+            <BrandChips
+              brand={activeBrand}
+              include={brandInclude}
+              setInclude={setBrandInclude}
+              logoVariant={logoVariant}
+              setLogoVariant={setLogoVariant}
+              logoBlocked={logoBlocked}
+            />
+          )}
           {isEditMode && visibility.preserve && (
             <div className="flex flex-col gap-2">
               <Input

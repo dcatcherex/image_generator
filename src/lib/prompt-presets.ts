@@ -1,5 +1,5 @@
 import type { SizeTier } from "./openai";
-import type { PreserveId } from "./prompt-builder";
+import type { BrandInclude, PreserveId } from "./prompt-builder";
 
 // Client-side preset library adapted from the examples in OpenAI's GPT Image 2.5 prompting
 // guide. A preset only fills the plain prompt textarea with a labelled-section scaffold (edit
@@ -19,10 +19,19 @@ export type PromptPreset = {
   id: string;
   label: string;
   mode: "generate" | "edit";
+  // Social presets are listed under their own heading in the picker.
+  group?: "social";
   scaffold: string;
   params?: PresetParams;
   preserve?: PreserveId[];
+  // Brand chips this preset turns on/off, when a brand is active.
+  brandInclude?: BrandInclude;
 };
+
+/** The scaffold with `{lang}` filled from the active brand's text language. */
+export function presetScaffold(preset: PromptPreset, language: string | null): string {
+  return preset.scaffold.replaceAll("{lang}", language ? ` in ${language}` : "");
+}
 
 const ALL_PRESERVE: PreserveId[] = [
   "identity",
@@ -166,6 +175,84 @@ Camera: <three-quarter angle>, 85mm, sharp focus, soft shadow
 Lighting: softbox key light, gentle rim light, clean reflections
 Constraints: accurate product proportions, no extra logos or text`,
     params: { aspect: "4:5", quality: "high" },
+  },
+
+  // ---- Social posts (by layout type; BRANDS.md decision 9) ----
+  // Look and palette come from the active brand's Brand section, so these scaffolds only
+  // describe layout and copy. `{lang}` becomes " in <brand language>" (or nothing).
+  {
+    id: "social-promo",
+    label: "Promo / offer post",
+    mode: "generate",
+    group: "social",
+    scaffold: `Type: social media promo post for <product or service>
+Offer: <the deal, e.g. 20% off until Sunday>
+Headline: "<short punchy headline{lang}>" — large, top third
+Supporting line: "<one line of detail{lang}>"
+Call to action: "<call to action{lang}>" on a pill-shaped button
+Visual: <hero product photo or illustration and what surrounds it>
+Layout: clear visual hierarchy, generous margins, text readable on a phone`,
+    params: { aspect: "4:5", quality: "high" },
+    brandInclude: { palette: true, style: true, logo: true, standingText: true },
+  },
+  {
+    id: "social-announcement",
+    label: "Announcement",
+    mode: "generate",
+    group: "social",
+    scaffold: `Type: social media announcement post
+News: <what is new, e.g. a new branch opening, a new service>
+Headline: "<headline{lang}>" — bold and centred
+Details: "<date, place or one key fact{lang}>"
+Visual: <one simple supporting image or illustration>
+Layout: headline first, lots of breathing room, text readable on a phone`,
+    params: { aspect: "1:1", quality: "high" },
+    brandInclude: { palette: true, style: true, logo: true, standingText: false },
+  },
+  {
+    id: "social-tips",
+    label: "Tips / carousel slide",
+    mode: "generate",
+    group: "social",
+    scaffold: `Type: educational carousel slide, <slide number> of <total>
+Topic: <what the series teaches>
+Title: "<tip title{lang}>"
+Points:
+1. "<short point{lang}>"
+2. "<short point{lang}>"
+3. "<short point{lang}>"
+Visual: one simple icon or illustration per point
+Layout: numbered list, consistent margins so slides line up in a carousel`,
+    params: { aspect: "4:5", quality: "high" },
+    brandInclude: { palette: true, style: true, logo: false, standingText: false },
+  },
+  {
+    id: "social-quote",
+    label: "Quote / testimonial",
+    mode: "generate",
+    group: "social",
+    scaffold: `Type: social media quote card
+Quote: "<the quote or customer review{lang}>"
+Attribution: "<name, role or customer type{lang}>"
+Visual: <a portrait, a soft texture or a simple backdrop>
+Layout: large quotation marks, the quote as the hero, attribution small below`,
+    params: { aspect: "1:1", quality: "high" },
+    brandInclude: { palette: true, style: true, logo: true, standingText: false },
+  },
+  {
+    id: "social-event",
+    label: "Event",
+    mode: "generate",
+    group: "social",
+    scaffold: `Type: social media event poster
+Event: "<event name{lang}>"
+When & where: "<date, time and place{lang}>"
+Highlights: "<two or three short highlights{lang}>"
+Call to action: "<how to join or register{lang}>"
+Visual: <scene or illustration that sets the mood of the event>
+Layout: event name largest, date and place easy to find at a glance`,
+    params: { aspect: "4:5", quality: "high" },
+    brandInclude: { palette: true, style: true, logo: true, standingText: true },
   },
 
   // ---- Edit ----
