@@ -38,6 +38,7 @@ import {
   type LogoVariant,
 } from "@/lib/brands";
 import { brandToDesignMd, parseDesignMd, type ParsedBrand } from "@/lib/brand-design-md";
+import { useFileDrop } from "@/lib/use-file-drop";
 import { cn } from "cn";
 
 const HEX = /^#[0-9a-f]{6}$/i;
@@ -641,6 +642,11 @@ function Field({
   );
 }
 
+// Browsers often report .md files with an empty MIME type, so go by extension first.
+function isMarkdownFile(file: File): boolean {
+  return /\.(md|markdown|txt)$/i.test(file.name) || file.type.startsWith("text/");
+}
+
 function ImportPanel({
   text,
   setText,
@@ -651,10 +657,21 @@ function ImportPanel({
   onApply: () => void;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
+  const loadFile = async (file: File) => setText(await file.text());
+  const { isDraggingOver, dropProps } = useFileDrop({
+    accept: isMarkdownFile,
+    onFiles: (files) => loadFile(files[0]),
+  });
   return (
-    <div className="flex flex-col gap-2 rounded-lg border bg-muted/30 p-3">
+    <div
+      {...dropProps}
+      className={cn(
+        "flex flex-col gap-2 rounded-lg border bg-muted/30 p-3 transition-colors",
+        isDraggingOver && "bg-muted ring-2 ring-primary ring-offset-1"
+      )}
+    >
       <p className="text-xs text-muted-foreground">
-        Paste a DESIGN.md (or load a file). It replaces the fields below; anything that isn&apos;t
+        Paste, drop or load a DESIGN.md. It replaces the fields below; anything that isn&apos;t
         recognised goes to Notes. Nothing is saved until you click Save.
       </p>
       <Textarea
@@ -671,7 +688,7 @@ function ImportPanel({
           className="hidden"
           onChange={async (e) => {
             const file = e.target.files?.[0];
-            if (file) setText(await file.text());
+            if (file) await loadFile(file);
             e.target.value = "";
           }}
         />

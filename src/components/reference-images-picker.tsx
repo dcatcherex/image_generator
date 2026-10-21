@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef } from "react";
 import Image from "next/image";
 import { Upload, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { REFERENCE_ROLES, defaultReferenceRole } from "@/lib/prompt-builder";
 import { referenceItemFromFile, type ReferenceItem } from "@/lib/reference-items";
+import { useFileDrop } from "@/lib/use-file-drop";
 import { cn } from "cn";
 
 export function ReferenceImagesPicker({
@@ -23,14 +24,16 @@ export function ReferenceImagesPicker({
   className?: string;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [isDraggingOver, setIsDraggingOver] = useState(false);
+  const isImage = (f: File) => f.type.startsWith("image/");
 
   function addFiles(files: FileList | File[] | null) {
     if (!files) return;
-    const imageFiles = Array.from(files).filter((f) => f.type.startsWith("image/"));
+    const imageFiles = Array.from(files).filter(isImage);
     if (imageFiles.length === 0) return;
     onChange([...items, ...imageFiles.map(referenceItemFromFile)]);
   }
+
+  const { isDraggingOver, dropProps } = useFileDrop({ accept: isImage, onFiles: addFiles });
 
   function updateItem(key: string, patch: Partial<ReferenceItem>) {
     onChange(items.map((r) => (r.key === key ? { ...r, ...patch } : r)));
@@ -41,19 +44,7 @@ export function ReferenceImagesPicker({
   }
 
   return (
-    <div
-      className={cn("flex flex-col gap-2", className)}
-      onDragOver={(e) => {
-        e.preventDefault();
-        setIsDraggingOver(true);
-      }}
-      onDragLeave={() => setIsDraggingOver(false)}
-      onDrop={(e) => {
-        e.preventDefault();
-        setIsDraggingOver(false);
-        addFiles(e.dataTransfer.files);
-      }}
-    >
+    <div className={cn("flex flex-col gap-2", className)} {...dropProps}>
       {label && <Label>{label}</Label>}
       <div
         className={cn(
