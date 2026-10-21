@@ -9,6 +9,7 @@ import {
   sanitizeBrandLanguage,
   sanitizeBrandName,
 } from "@/lib/brands";
+import { parseDesignMd } from "@/lib/brand-design-md";
 
 // Brands are owner-only data, so unlike /api/images even reads require the owner.
 export async function GET(req: NextRequest) {
@@ -29,16 +30,18 @@ export async function POST(req: NextRequest) {
   const denied = await requireOwner();
   if (denied) return denied;
 
+  // `{ markdown }` imports a DESIGN.md; explicit fields (e.g. a renamed `name`) win over it.
   const body = await req.json().catch(() => null);
-  const name = sanitizeBrandName(body?.name);
+  const imported = typeof body?.markdown === "string" ? parseDesignMd(body.markdown) : null;
+  const name = sanitizeBrandName(body?.name ?? imported?.name);
   if (!name) return NextResponse.json({ error: "Brand name is required" }, { status: 400 });
 
   const [row] = await getDb()
     .insert(brands)
     .values({
       name,
-      kit: sanitizeBrandKit(body?.kit),
-      language: sanitizeBrandLanguage(body?.language),
+      kit: sanitizeBrandKit(body?.kit, imported?.kit),
+      language: sanitizeBrandLanguage(body?.language ?? imported?.language),
     })
     .returning();
 

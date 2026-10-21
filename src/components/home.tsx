@@ -8,6 +8,8 @@ import { Gallery } from "@/components/gallery";
 import { CompareDialog } from "@/components/compare-dialog";
 import { HelpDialog } from "@/components/help-dialog";
 import { SettingsDialog } from "@/components/settings-dialog";
+import { BrandSwitcher } from "@/components/brand-switcher";
+import { BrandsDialog } from "@/components/brands-dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { ReadOnlyProvider } from "@/lib/read-only";
@@ -15,6 +17,7 @@ import { referenceItemFromImage, type ReferenceItem } from "@/lib/reference-item
 import { useImageStream } from "@/lib/use-image-stream";
 import { useGalleryView } from "@/lib/use-gallery-view";
 import { usePanelOptions } from "@/lib/use-panel-options";
+import { useBrands } from "@/lib/use-brands";
 import { ALL_TAGS_FILTER } from "@/lib/tags";
 import type { PreserveId } from "@/lib/prompt-builder";
 import type { BatchJobRecord, ImageRecord } from "@/lib/types";
@@ -46,6 +49,8 @@ export function Home({ readOnly }: { readOnly: boolean }) {
   const [compareImages, setCompareImages] = useState<ImageRecord[] | null>(null);
   const galleryView = useGalleryView();
   const panelOptions = usePanelOptions();
+  const brandState = useBrands(!readOnly);
+  const [brandsDialogOpen, setBrandsDialogOpen] = useState(false);
 
   useEffect(() => {
     fetch("/api/images")
@@ -175,6 +180,20 @@ export function Home({ readOnly }: { readOnly: boolean }) {
             </div>
           </div>
 
+          {/* Outside the scroll area so the active brand stays visible (BRANDS.md decision 6). */}
+          {!readOnly && (
+            <div className="flex items-center gap-2 px-2 h-10 border-b shrink-0">
+              <span className="pl-2 text-xs text-muted-foreground">Brand</span>
+              <BrandSwitcher
+                brands={brandState.brands}
+                active={brandState.active}
+                activeBrand={brandState.activeBrand}
+                setActive={brandState.setActive}
+                onManage={() => setBrandsDialogOpen(true)}
+              />
+            </div>
+          )}
+
           {readOnly && (
             <p className="px-4 py-2 border-b text-xs text-muted-foreground bg-muted/50">
               View-only beta — you can browse everything, but generating and editing are off.
@@ -236,6 +255,16 @@ export function Home({ readOnly }: { readOnly: boolean }) {
           />
         )}
       </div>
+
+      {brandsDialogOpen && (
+        <BrandsDialog
+          brands={brandState.brands}
+          initialBrandId={brandState.activeBrand?.id ?? null}
+          onClose={() => setBrandsDialogOpen(false)}
+          upsertBrand={brandState.upsertBrand}
+          removeBrand={brandState.removeBrand}
+        />
+      )}
 
       {compareImages && (
         <CompareDialog
