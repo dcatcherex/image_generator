@@ -11,6 +11,7 @@ import { ImageLightbox } from "@/components/image-lightbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ALL_TAGS_FILTER, TAG_FILTER_OPTIONS } from "@/lib/tags";
 import type { GalleryViewMode } from "@/lib/use-gallery-view";
+import type { ActiveBrand } from "@/lib/use-brands";
 import { distributeIntoColumns, estimateAspectRatio } from "@/lib/masonry";
 import type { BatchJobRecord, ImageRecord } from "@/lib/types";
 
@@ -36,6 +37,7 @@ export function Gallery({
   pendingBatchJobs = [],
   view,
   columns,
+  brandFilter,
 }: {
   images: ImageRecord[];
   onDelete: (image: ImageRecord) => void;
@@ -54,6 +56,8 @@ export function Gallery({
   pendingBatchJobs?: BatchJobRecord[];
   view: GalleryViewMode;
   columns: number;
+  // The header brand switcher: "all", "none" (unbranded only) or one brand's id.
+  brandFilter: ActiveBrand;
 }) {
   // Economy-mode batch jobs haven't produced any `images` rows yet (ingestion is what
   // creates them, all at once, when the batch finishes) — so every requested image in a
@@ -67,10 +71,13 @@ export function Gallery({
     return images.filter((img) => {
       if (favoritesOnly && !img.favorite) return false;
       if (tagFilter !== ALL_TAGS_FILTER && img.tag !== tagFilter) return false;
+      if (brandFilter === "none" ? img.brandId !== null : brandFilter !== "all" && img.brandId !== brandFilter) {
+        return false;
+      }
       if (query && !img.prompt.toLowerCase().includes(query.toLowerCase())) return false;
       return true;
     });
-  }, [images, query, favoritesOnly, tagFilter]);
+  }, [images, query, favoritesOnly, tagFilter, brandFilter]);
 
   const renderItems = useMemo<RenderItem[]>(() => {
     const items: RenderItem[] = [];

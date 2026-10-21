@@ -18,6 +18,7 @@ import { ASSIGNABLE_TAGS } from "@/lib/tags";
 import { useReadOnly } from "@/lib/read-only";
 import type { ImageRecord } from "@/lib/types";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
+import { ImageBrandBadge, SetBrandSelect } from "@/components/image-brand";
 
 const NO_TAG = "No tag";
 
@@ -125,6 +126,7 @@ export function ImageCard({
               {image.tag}
             </Badge>
           )}
+          <ImageBrandBadge image={image} />
           {image.background === "transparent" && image.transparencyOk === false && (
             <Badge variant="destructive" className="gap-1 text-[10px]" title="Transparent background requested but the image is fully opaque">
               <TriangleAlert className="size-3" /> Opaque
@@ -195,6 +197,11 @@ export function ImageCard({
               ))}
             </SelectContent>
           </Select>
+          <SetBrandSelect
+            image={image}
+            onImageUpdated={onImageUpdated}
+            triggerClassName="h-7 w-7 justify-center border-none bg-secondary p-0 hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)] [&>svg]:hidden"
+          />
           </>
           )}
           <Tooltip>

@@ -61,6 +61,8 @@ export type BrandPromptInput = {
   section: BrandSnapshot;
   include: BrandInclude;
   logoVariant?: LogoVariant;
+  // Re-skin only: the standing text replaces the source image's contact details.
+  replaceContactInfo?: boolean;
 };
 
 export type PromptInputs = {
@@ -98,11 +100,19 @@ export function buildPrompt(inputs: PromptInputs): string {
   }
 
   const exactText = inputs.exactText?.trim();
-  const standingText = inputs.brand?.include.standingText ? inputs.brand.section.standingText?.trim() : "";
+  const brandStandingText = inputs.brand?.include.standingText ? inputs.brand.section.standingText?.trim() : "";
+  // When re-skinning with "Replace contact info", the standing text gets its own replacement
+  // instruction instead of joining the text to add.
+  const replacementText = inputs.brand?.replaceContactInfo ? brandStandingText : "";
+  const standingText = replacementText ? "" : brandStandingText;
 
   if (inputs.brand) {
     const logoIndex = roles.findIndex((r) => r.role === "logo");
-    sections.push(brandSection(inputs.brand, Boolean(exactText || standingText), logoIndex));
+    // Preserved or contact-swapped source text (re-skins) must not be translated.
+    const keepsExistingText = Boolean(inputs.preserve?.includes("text") || replacementText);
+    sections.push(
+      brandSection(inputs.brand, Boolean(exactText || standingText || replacementText), logoIndex, keepsExistingText)
+    );
   }
 
   sections.push(inputs.base.trim());
@@ -132,6 +142,12 @@ export function buildPrompt(inputs: PromptInputs): string {
     );
   }
 
+  if (replacementText) {
+    sections.push(
+      `Contact details: replace the existing contact details (phone numbers, LINE ID, website, address, social handles) with this text, verbatim, exactly once, in the same place:\n"${replacementText}"\nKeep all other text exactly as written.`
+    );
+  }
+
   return sections.join("\n\n");
 }
 
@@ -150,7 +166,12 @@ export function stripBrandSection(prompt: string): string {
   );
 }
 
-function brandSection(brand: BrandPromptInput, hasVerbatimText: boolean, logoIndex: number): string {
+function brandSection(
+  brand: BrandPromptInput,
+  hasVerbatimText: boolean,
+  logoIndex: number,
+  keepsExistingText: boolean
+): string {
   const { section, include } = brand;
   const lines: string[] = [];
 
@@ -178,7 +199,10 @@ function brandSection(brand: BrandPromptInput, hasVerbatimText: boolean, logoInd
   const lang = section.language;
   const thai = /^thai$/i.test(lang);
   lines.push(
-    `- Write all text in ${lang}${thai ? ", with correct spelling and tone marks" : ", spelled correctly"}` +
+    (keepsExistingText
+      ? `- Keep existing text in its original language; write any new text in ${lang}`
+      : `- Write all text in ${lang}`) +
+      `${thai ? ", with correct spelling and tone marks" : ", spelled correctly"}` +
       `${include.style && section.typeFeel ? ", in the brand's typography feel" : ""}.` +
       (hasVerbatimText ? " Text given verbatim below stays exactly as written." : "")
   );
@@ -205,7 +229,12 @@ export function brandSnapshot(
 
 /** What the client may say about the brand: which one and which chips. The kit itself is
  * always loaded server-side from `id`. */
-export type BrandRequest = { id: string; include: BrandInclude; logoVariant?: LogoVariant };
+export type BrandRequest = {
+  id: string;
+  include: BrandInclude;
+  logoVariant?: LogoVariant;
+  replaceContactInfo?: boolean;
+};
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const LOGO_VARIANT_IDS = new Set(["primary", "on-dark", "icon"]);
@@ -224,7 +253,12 @@ export function sanitizeBrandRequest(raw: unknown): BrandRequest | null {
   };
   const logoVariant =
     typeof r.logoVariant === "string" && LOGO_VARIANT_IDS.has(r.logoVariant) ? (r.logoVariant as LogoVariant) : undefined;
-  return { id: r.id, include, ...(logoVariant ? { logoVariant } : {}) };
+  return {
+    id: r.id,
+    include,
+    ...(logoVariant ? { logoVariant } : {}),
+    ...(r.replaceContactInfo === true ? { replaceContactInfo: true } : {}),
+  };
 }
 
 const ROLE_IDS = new Set<string>(REFERENCE_ROLES.map((r) => r.id));

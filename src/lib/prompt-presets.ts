@@ -26,6 +26,8 @@ export type PromptPreset = {
   preserve?: PreserveId[];
   // Brand chips this preset turns on/off, when a brand is active.
   brandInclude?: BrandInclude;
+  // Needs an active brand; only listed while one is selected, and shows "Replace contact info".
+  reskin?: true;
 };
 
 /** The scaffold with `{lang}` filled from the active brand's text language. */
@@ -256,6 +258,18 @@ Layout: event name largest, date and place easy to find at a glance`,
   },
 
   // ---- Edit ----
+  {
+    // Re-skins the reference into the active brand (BRANDS.md "Re-skin"). The Brand section
+    // sits above the prompt, hence "the brand described above"; buildPrompt numbers the logo.
+    id: "reskin-brand",
+    label: "Re-skin to brand",
+    mode: "edit",
+    reskin: true,
+    scaffold: `Restyle this design into the brand described above: swap its colours to the brand palette, match the brand's style and typography feel, and replace any existing logo with the brand logo.
+Keep the layout, imagery and copy unchanged.`,
+    preserve: ["layout", "text", "identity"],
+    brandInclude: { palette: true, style: true, logo: true, standingText: false },
+  },
   {
     id: "product-cutout",
     label: "Product cutout",

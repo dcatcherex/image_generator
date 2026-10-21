@@ -17,6 +17,7 @@ import { formatDuration, imageCostLabel } from "@/lib/pricing";
 import { ASSIGNABLE_TAGS } from "@/lib/tags";
 import { getVersionChain } from "@/lib/version-chain";
 import { useReadOnly } from "@/lib/read-only";
+import { ImageBrandBadge, SetBrandSelect } from "@/components/image-brand";
 import type { ImageRecord } from "@/lib/types";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 
@@ -172,6 +173,12 @@ export function ImageLightbox({
               ))}
             </SelectContent>
           </Select>
+          <SetBrandSelect
+            image={image}
+            onImageUpdated={onImageUpdated}
+            triggerClassName="h-8 w-8 justify-center rounded-full border-none bg-secondary/80 p-0 hover:bg-secondary [&>svg]:hidden hover:cursor-pointer"
+            iconClassName="size-4"
+          />
           <Button
             size="icon"
             variant="secondary"
@@ -248,6 +255,7 @@ export function ImageLightbox({
               {image.tag}
             </Badge>
           )}
+          <ImageBrandBadge image={image} />
         </div>
 
         <p className="text-sm text-foreground/90">{image.prompt}</p>

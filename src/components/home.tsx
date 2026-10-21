@@ -13,6 +13,8 @@ import { BrandsDialog } from "@/components/brands-dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { ReadOnlyProvider } from "@/lib/read-only";
+import { BrandsProvider } from "@/lib/brands-context";
+import { toast } from "sonner";
 import { referenceItemFromImage, type ReferenceItem } from "@/lib/reference-items";
 import { useImageStream } from "@/lib/use-image-stream";
 import { useGalleryView } from "@/lib/use-gallery-view";
@@ -114,6 +116,7 @@ export function Home({ readOnly }: { readOnly: boolean }) {
   // of this one image: it replaces the references, carries the image's constraints forward
   // and remembers it as the parent so the versions chain can be rebuilt later.
   async function handleRefine(image: ImageRecord) {
+    warnIfBrandDiffers(image);
     const item = await referenceItemFromImage(image);
     setReferenceItems([item]);
     setChangeOnly(image.promptInputs?.changeOnly ?? "");
@@ -121,6 +124,24 @@ export function Home({ readOnly }: { readOnly: boolean }) {
     setParentImageId(image.id);
     setPrompt("");
     setTimeout(() => document.getElementById("prompt")?.focus(), 0);
+  }
+
+  // Refining uses the active brand's current settings, never the image's snapshot (BRANDS.md
+  // decision 11). If that's a different brand, say so and offer to switch rather than switch
+  // silently; if it's the same brand but edited since, say the current version applies.
+  function warnIfBrandDiffers(image: ImageRecord) {
+    const active = brandState.activeBrand;
+    if (image.brandId && image.brandId !== active?.id) {
+      const brand = brandState.brands.find((b) => b.id === image.brandId);
+      if (!brand) return;
+      toast.warning(`This image was made for ${brand.name}, but ${active ? active.name : "no brand"} is active`, {
+        action: brand.archivedAt
+          ? undefined
+          : { label: `Use ${brand.name}`, onClick: () => brandState.setActive(brand.id) },
+      });
+    } else if (active && image.brandId === active.id && Date.parse(active.updatedAt) > Date.parse(image.createdAt)) {
+      toast.info(`${active.name} has changed since this image was made — refining uses its current settings`);
+    }
   }
 
   function handleUseAsPrompt(image: ImageRecord) {
@@ -145,6 +166,7 @@ export function Home({ readOnly }: { readOnly: boolean }) {
 
   return (
     <ReadOnlyProvider value={readOnly}>
+    <BrandsProvider value={brandState.brands}>
     <div className="flex flex-col h-screen">
       <div className="flex flex-col-reverse lg:flex-row-reverse flex-1 min-h-0">
         <div className="lg:w-[340px] shrink-0 flex flex-col max-h-[45vh] lg:max-h-none lg:h-full min-h-0 border-b lg:border-b-0 lg:border-l bg-background">
@@ -253,6 +275,7 @@ export function Home({ readOnly }: { readOnly: boolean }) {
             pendingBatchJobs={pendingBatchJobs}
             view={galleryView.view}
             columns={galleryView.columns}
+            brandFilter={brandState.active}
           />
         )}
       </div>
@@ -275,6 +298,7 @@ export function Home({ readOnly }: { readOnly: boolean }) {
         />
       )}
     </div>
+    </BrandsProvider>
     </ReadOnlyProvider>
   );
 }

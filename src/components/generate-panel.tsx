@@ -161,6 +161,9 @@ export function GeneratePanel({
   // Which parts of the active brand to apply (the chip row); social presets set their own.
   const [brandInclude, setBrandInclude] = useState<BrandInclude>(DEFAULT_BRAND_INCLUDE);
   const [logoVariant, setLogoVariant] = useState<LogoVariant>("primary");
+  // Set by the "Re-skin to brand" preset; another preset clears it.
+  const [reskinPreset, setReskinPreset] = useState(false);
+  const [replaceContact, setReplaceContact] = useState(false);
   // Hiding the Economy switch also turns the mode off, so a hidden toggle can't silently
   // keep routing generations through the slow batch path.
   const economyMode = visibility.economy && economyModeOn;
@@ -179,6 +182,7 @@ export function GeneratePanel({
   const costStats = useCostStats();
 
   const isEditMode = referenceItems.length > 0;
+  const reskinOn = reskinPreset && isEditMode && activeBrand !== null;
 
   const maskableItem = referenceItems.length === 1 ? referenceItems[0] : null;
   const activeMask = maskableItem && maskableItem.key === maskOwnerKey ? maskFile : null;
@@ -198,6 +202,7 @@ export function GeneratePanel({
         id: activeBrand.id,
         include: { ...brandInclude, logo: logoOn },
         ...(logoOn ? { logoVariant } : {}),
+        ...(reskinOn && replaceContact ? { replaceContactInfo: true } : {}),
       }
     : null;
 
@@ -297,6 +302,8 @@ export function GeneratePanel({
     if (p.background) setBackgroundState(p.background);
     if (preset.mode === "edit" && preset.preserve) setPreserve(preset.preserve);
     if (activeBrand && preset.brandInclude) setBrandInclude(preset.brandInclude);
+    setReskinPreset(Boolean(preset.reskin));
+    setReplaceContact(false);
     setPendingPreset(null);
     const details = [
       p.quality && `quality ${p.quality}`,
@@ -308,6 +315,14 @@ export function GeneratePanel({
       activeBrand && preset.brandInclude?.standingText && "standing text on",
     ].filter(Boolean);
     toast.success(`Applied preset: ${preset.label}${details.length ? ` (${details.join(", ")})` : ""}`);
+  }
+
+  // "Replace contact info" swaps the source's contact details for the brand's standing text,
+  // so the copy can no longer be preserved word for word; everything else still is.
+  function handleReplaceContact(on: boolean) {
+    setReplaceContact(on);
+    setPreserve(on ? preserve.filter((p) => p !== "text") : preserve.includes("text") ? preserve : [...preserve, "text"]);
+    if (on) setBrandInclude({ ...brandInclude, standingText: true });
   }
 
   function handlePresetPicked(id: string) {
@@ -495,7 +510,9 @@ export function GeneratePanel({
                   <SelectValue placeholder={isEditMode ? "Edit presets…" : "Presets…"} />
                 </SelectTrigger>
                 <SelectContent>
-                  {PROMPT_PRESETS.filter((x) => x.mode === (isEditMode ? "edit" : "generate") && !x.group).map((x) => (
+                  {PROMPT_PRESETS.filter(
+                    (x) => x.mode === (isEditMode ? "edit" : "generate") && !x.group && (!x.reskin || activeBrand)
+                  ).map((x) => (
                     <SelectItem key={x.id} value={x.id}>{x.label}</SelectItem>
                   ))}
                   {!isEditMode && (
@@ -620,6 +637,21 @@ export function GeneratePanel({
                 })}
               </div>
             </div>
+          )}
+          {reskinOn && activeBrand && (
+            <label
+              className="flex items-center gap-2 text-xs text-muted-foreground"
+              title={activeBrand.kit.standingText ? undefined : `${activeBrand.name} has no standing text to put in`}
+            >
+              <input
+                type="checkbox"
+                checked={replaceContact}
+                disabled={!activeBrand.kit.standingText}
+                onChange={(e) => handleReplaceContact(e.target.checked)}
+                className="size-3.5 accent-primary"
+              />
+              Replace contact info with {activeBrand.name}&apos;s standing text
+            </label>
           )}
           <ReferenceImagesPicker items={referenceItems} onChange={setReferenceItems} />
 

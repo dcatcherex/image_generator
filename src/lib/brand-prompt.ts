@@ -42,6 +42,7 @@ export async function resolveBrand(request: BrandRequest): Promise<ResolvedBrand
       section: brandSnapshot(brand.kit, brand.language, request.include),
       include: request.include,
       ...(logoVariant ? { logoVariant } : {}),
+      ...(request.replaceContactInfo && request.include.standingText ? { replaceContactInfo: true } : {}),
     },
     logo,
   };

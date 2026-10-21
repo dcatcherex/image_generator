@@ -8,6 +8,7 @@ import {
   HelpCircle,
   Images,
   Paintbrush2,
+  Palette,
   Ratio,
   Settings as SettingsIcon,
   Sparkles,
@@ -16,7 +17,7 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { SIZE_TIERS, sizeFromAspectRatio } from "@/lib/openai";
-import { BATCH_PRICE_MULTIPLIER, estimateCost, formatCostThb, previewCostUsd } from "@/lib/pricing";
+import { BATCH_PRICE_MULTIPLIER, estimateCost, formatCostThb, inputImagesCostUsd, previewCostUsd } from "@/lib/pricing";
 import { PROMPT_PRESETS } from "@/lib/prompt-presets";
 import { PRESERVE_OPTIONS, REFERENCE_ROLES } from "@/lib/prompt-builder";
 import { cn } from "cn";
@@ -29,6 +30,8 @@ const PRICE_LOW = formatCostThb(estimateCost("low", "1024x1536").usd);
 const PRICE_HIGH = formatCostThb(estimateCost("high", "1024x1536").usd);
 const PRICE_PREVIEW = formatCostThb(previewCostUsd(PREVIEW_PARTIALS));
 const ECONOMY_PERCENT = Math.round((1 - BATCH_PRICE_MULTIPLIER) * 100);
+const PRICE_LOGO = formatCostThb(inputImagesCostUsd(1));
+const SOCIAL_PRESETS = PROMPT_PRESETS.filter((p) => p.group === "social").map((p) => p.label);
 
 function H({ children }: { children: ReactNode }) {
   return <h4 className="mt-5 mb-1.5 text-sm font-semibold first:mt-0">{children}</h4>;
@@ -234,6 +237,43 @@ const SECTIONS: Array<{ id: string; label: string; icon: typeof BookOpen; body: 
         </P>
         <H>Finding images</H>
         <P>Search by prompt words, show favorites only, or filter by tag at the top of the gallery.</P>
+      </>
+    ),
+  },
+  {
+    id: "brands",
+    label: "Brands",
+    icon: Palette,
+    body: () => (
+      <>
+        <P>
+          A brand kit holds a brand&apos;s colours, style, typography feel, do&apos;s and don&apos;ts, standing text (contact info, LINE ID…), text language and up to three logos. Pick one with <K>Brand</K> at the top of the panel and every generation follows it. Brands are private: viewers never see them.
+        </P>
+        <H>Setting one up</H>
+        <List>
+          <li><K>Brand</K> → <K>Manage brands…</K> → <K>New brand</K>, fill the form and save. Then drop or upload logos: <b>Primary</b>, <b>On dark</b> and <b>Icon</b>.</li>
+          <li>Already have a DESIGN.md? <K>Import</K> it (paste, drop or load the file); anything that isn&apos;t recognised goes to Notes. <K>Export</K> downloads the brand as DESIGN.md.</li>
+          <li>Describe the type (&ldquo;rounded, extra-bold headlines&rdquo;) rather than font names or sizes — image models can&apos;t use real fonts. Four to six core colours work better than a long list.</li>
+          <li><K>Archive</K> hides a brand but keeps its images tagged. <K>Delete permanently</K> (on an archived brand) removes it and unbrands its images.</li>
+        </List>
+        <H>What gets used</H>
+        <P>
+          Under the prompt, the chips <K>Palette</K>, <K>Style</K>, <K>Logo</K> and <K>Standing text</K> choose which parts go into the prompt (palette and style are on by default). The text language always applies. A greyed-out chip can&apos;t be used right now — hover it to see why.
+        </P>
+        <List>
+          <li><b>Logo</b> sends the logo as an extra input image (about {PRICE_LOGO} more), so the image goes through the edit model: one image at a time, no live preview or comparison. It isn&apos;t available in Economy mode or with a mask.</li>
+          <li><b>Standing text</b> is written on the image word for word.</li>
+        </List>
+        <H>Social posts</H>
+        <P>The presets under <K>Social posts</K> ({SOCIAL_PRESETS.join(", ")}) set a layout, an aspect ratio and the chips that suit them. Their placeholders ask for copy in the brand&apos;s language.</P>
+        <H>Re-skinning an existing design</H>
+        <P>
+          Add the design as a reference, pick a brand, then choose the edit preset <K>Re-skin to brand</K>. It swaps colours, style and logo while keeping layout, imagery and wording. Tick <K>Replace contact info</K> to put the brand&apos;s standing text in place of the old contact details.
+        </P>
+        <H>In the gallery</H>
+        <P>
+          The brand picker also filters the gallery: one brand shows only its images, <K>No brand</K> shows unbranded ones, <K>All brands</K> shows everything. Change an image&apos;s brand with the bookmark button on its card or in the lightbox. Refining an image made for a different brand shows a warning with a button to switch to it.
+        </P>
       </>
     ),
   },
