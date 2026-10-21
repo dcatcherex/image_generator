@@ -1,5 +1,6 @@
 import type { ImageRow } from "@/db/schema";
 import type { ImageRecord } from "./types";
+import { stripBrandSection } from "./prompt-builder";
 
 /** The one place a DB row becomes an API/client `ImageRecord`. */
 export function rowToImageRecord(row: ImageRow): ImageRecord {
@@ -37,7 +38,11 @@ export function rowToImageRecord(row: ImageRow): ImageRecord {
   };
 }
 
-/** Brands are owner-only, so public viewers get records with brand fields removed. */
+/** Brands are owner-only, so public viewers get records with brand fields removed: the id,
+ * the snapshot in promptInputs and the "Brand:" section of the assembled prompt. */
 export function publicImageRecord(record: ImageRecord): ImageRecord {
-  return { ...record, brandId: null };
+  if (!record.promptInputs?.brand) return { ...record, brandId: null };
+  const inputs = { ...record.promptInputs };
+  delete inputs.brand;
+  return { ...record, brandId: null, promptInputs: inputs, prompt: stripBrandSection(record.prompt) };
 }

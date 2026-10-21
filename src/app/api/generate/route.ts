@@ -2,7 +2,8 @@ import { requireOwner } from "@/lib/require-owner";
 import { NextRequest } from "next/server";
 import { getOpenAI, MODEL, normalizeCompression, validateFormatBackground, validateSize } from "@/lib/openai";
 import { persistGeneratedImage, transparencyWarning } from "@/lib/save-image";
-import { buildPrompt, sanitizePromptInputs } from "@/lib/prompt-builder";
+import { buildPrompt, sanitizeBrandRequest, sanitizePromptInputs } from "@/lib/prompt-builder";
+import { resolveBrand } from "@/lib/brand-prompt";
 import { sseStreamFromEvents } from "@/lib/sse";
 import { actualSizeOr, usageToFields, type ImageUsage } from "@/lib/pricing";
 
@@ -35,10 +36,21 @@ export async function POST(req: NextRequest) {
 
   // Structured inputs are authoritative; a plain `prompt` string stays supported and is
   // treated as `{ base: prompt }` (without storing prompt_inputs, as before).
-  const promptInputs = sanitizePromptInputs(rawPromptInputs);
+  let promptInputs = sanitizePromptInputs(rawPromptInputs);
   const base = promptInputs?.base ?? rawPrompt;
   if (!base || typeof base !== "string") {
     return new Response(JSON.stringify({ error: "Prompt is required" }), { status: 400 });
+  }
+
+  const brandRequest = sanitizeBrandRequest(body?.brand);
+  if (brandRequest) {
+    // A logo is an input image, which only the edit endpoint takes; the panel sends those there.
+    if (brandRequest.include.logo) {
+      return new Response(JSON.stringify({ error: "Generations with a brand logo go through /api/edit" }), { status: 400 });
+    }
+    const resolved = await resolveBrand(brandRequest);
+    if ("error" in resolved) return new Response(JSON.stringify({ error: resolved.error }), { status: 400 });
+    promptInputs = { ...(promptInputs ?? { base }), brand: resolved.input };
   }
   const prompt = promptInputs ? buildPrompt(promptInputs) : base;
 

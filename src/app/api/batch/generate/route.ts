@@ -5,7 +5,8 @@ import { toFile } from "openai";
 import { getOpenAI, MODEL, normalizeCompression, validateFormatBackground, validateSize } from "@/lib/openai";
 import { getDb } from "@/db";
 import { batchJobs } from "@/db/schema";
-import { buildPrompt, sanitizePromptInputs } from "@/lib/prompt-builder";
+import { buildPrompt, sanitizeBrandRequest, sanitizePromptInputs } from "@/lib/prompt-builder";
+import { resolveBrand } from "@/lib/brand-prompt";
 import { buildBatchJsonl, type BatchRequestMeta } from "@/lib/batch";
 
 export const maxDuration = 60;
@@ -32,11 +33,21 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   const queued: QueuedRequest[] = Array.isArray(body?.requests) ? body.requests : [];
 
+  // One brand for the whole batch (BRANDS.md decision 16), resolved once. Batch only reaches
+  // /v1/images/generations, which takes no input images, so the logo can't be used here.
+  const brandRequest = sanitizeBrandRequest(body?.brand);
+  if (brandRequest?.include.logo) {
+    return NextResponse.json({ error: "The brand logo isn't available in Economy mode" }, { status: 400 });
+  }
+  const brand = brandRequest ? await resolveBrand(brandRequest) : null;
+  if (brand && "error" in brand) return NextResponse.json({ error: brand.error }, { status: 400 });
+
   const requests: BatchRequestMeta[] = [];
   for (const item of queued) {
-    const promptInputs = sanitizePromptInputs(item.promptInputs);
-    const base = promptInputs?.base ?? item.prompt;
+    const sanitized = sanitizePromptInputs(item.promptInputs);
+    const base = sanitized?.base ?? item.prompt;
     if (!base || typeof base !== "string") continue;
+    const promptInputs = brand ? { ...(sanitized ?? { base }), brand: brand.input } : sanitized;
     const prompt = promptInputs ? buildPrompt(promptInputs) : base;
     const sizeError = validateSize(item.size || "1024x1024");
     if (sizeError) return NextResponse.json({ error: sizeError }, { status: 400 });

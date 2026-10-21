@@ -3,13 +3,20 @@
 // and the raw inputs (`prompt_inputs`, so the UI can rehydrate them). All prompt wording
 // lives in this file.
 
-export type ReferenceRole = "subject" | "style" | "item" | "scene" | "other";
+import type { BrandColor, LogoVariant } from "./brands";
+
+export type ReferenceRole = "subject" | "style" | "item" | "scene" | "logo" | "other";
 
 export const REFERENCE_ROLES = [
   { id: "subject", label: "Subject", text: "subject to preserve" },
   { id: "style", label: "Style", text: "style reference — use only its palette, texture and visual medium" },
   { id: "item", label: "Clothing or item", text: "item to apply" },
   { id: "scene", label: "Scene or background", text: "scene/background to place things into" },
+  {
+    id: "logo",
+    label: "Logo",
+    text: "logo — reproduce it exactly as provided; do not alter its shape, proportions, colours or lettering",
+  },
   { id: "other", label: "Other", text: "reference" },
 ] as const satisfies ReadonlyArray<{ id: ReferenceRole; label: string; text: string }>;
 
@@ -28,12 +35,42 @@ export type PreserveId = (typeof PRESERVE_OPTIONS)[number]["id"];
 
 export type ReferenceRoleEntry = { role: ReferenceRole; note?: string };
 
+/** Which parts of the active brand a generation uses (the chips under the panel). */
+export type BrandInclude = { palette: boolean; style: boolean; logo: boolean; standingText: boolean };
+
+export const DEFAULT_BRAND_INCLUDE: BrandInclude = { palette: true, style: true, logo: false, standingText: false };
+
+/**
+ * The brand fields a prompt was built from, copied out of the brand at generation time so
+ * old images stay reproducible after the brand is edited or deleted. Only what the enabled
+ * chips used is kept (language always, since it applies whenever a brand is active).
+ */
+export type BrandSnapshot = {
+  language: string;
+  colors?: BrandColor[];
+  style?: string;
+  typeFeel?: string;
+  dos?: string[];
+  donts?: string[];
+  standingText?: string;
+};
+
+export type BrandPromptInput = {
+  id: string;
+  name: string;
+  section: BrandSnapshot;
+  include: BrandInclude;
+  logoVariant?: LogoVariant;
+};
+
 export type PromptInputs = {
   base: string; // what the user typed
   exactText?: string;
   changeOnly?: string; // edit only
   preserve?: PreserveId[]; // edit only
-  referenceRoles?: ReferenceRoleEntry[]; // edit only, in upload order
+  referenceRoles?: ReferenceRoleEntry[]; // edit only, in upload order (a brand logo is last)
+  // Server-resolved from the brand id (see src/lib/brand-prompt.ts); never taken from the client.
+  brand?: BrandPromptInput;
 };
 
 /** Default role for the reference at `index`: the first is the subject, the rest "other". */
@@ -49,14 +86,23 @@ export function buildPrompt(inputs: PromptInputs): string {
   const sections: string[] = [];
 
   // A lone reference with no note needs no explanation, so single-image edits stay untouched.
+  // A logo always does: without it the model would treat a lone logo as the subject to edit.
   const roles = inputs.referenceRoles ?? [];
-  if (roles.length >= 2 || roles.some((r) => r.note?.trim())) {
+  if (roles.length >= 2 || roles.some((r) => r.note?.trim() || r.role === "logo")) {
     const lines = roles.map((r, i) => {
       const text = REFERENCE_ROLES.find((o) => o.id === r.role)?.text ?? "reference";
       const note = r.note?.trim();
       return `- Image ${i + 1}: ${text}${note ? ` — ${note}` : ""}`;
     });
     sections.push(`Inputs:\n${lines.join("\n")}`);
+  }
+
+  const exactText = inputs.exactText?.trim();
+  const standingText = inputs.brand?.include.standingText ? inputs.brand.section.standingText?.trim() : "";
+
+  if (inputs.brand) {
+    const logoIndex = roles.findIndex((r) => r.role === "logo");
+    sections.push(brandSection(inputs.brand, Boolean(exactText || standingText), logoIndex));
   }
 
   sections.push(inputs.base.trim());
@@ -73,14 +119,112 @@ export function buildPrompt(inputs: PromptInputs): string {
     );
   }
 
-  const exactText = inputs.exactText?.trim();
   if (exactText) {
+    // Standing text (contact info etc.) joins the verbatim block rather than being "other text".
+    const blocks = [exactText, standingText].filter(Boolean).map((t) => `"${t}"`);
     sections.push(
-      `Text (render verbatim, exactly once, clearly legible; no other text):\n"${exactText}"`
+      `Text (render verbatim, ${blocks.length > 1 ? "each " : ""}exactly once, clearly legible; no other text):\n${blocks.join("\n")}`
+    );
+  } else if (standingText) {
+    // Without exact text the base prompt may ask for its own headline, so no "no other text".
+    sections.push(
+      `Also include this text verbatim, exactly once, clearly legible (e.g. as a footer or contact line):\n"${standingText}"`
     );
   }
 
   return sections.join("\n\n");
+}
+
+// Brand fields are often pasted markdown lists. Each becomes one line, which reads better in
+// the prompt and keeps the Brand section blank-line-free so stripBrandSection can find its end.
+function oneLine(text: string): string {
+  const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
+  const isList = lines.some((l) => /^[-*+]\s/.test(l));
+  return lines.map((l) => l.replace(/^[-*+]\s+/, "").replace(/\*\*/g, "")).join(isList ? "; " : " ");
+}
+
+/** Removes the "Brand:" section from an assembled prompt (brands are owner-only data). */
+export function stripBrandSection(prompt: string): string {
+  return prompt.replace(/(^|\n\n)Brand: [^\n]*(\n- [^\n]*)*(\n\n|$)/, (_m, before, _l, after) =>
+    before && after ? "\n\n" : ""
+  );
+}
+
+function brandSection(brand: BrandPromptInput, hasVerbatimText: boolean, logoIndex: number): string {
+  const { section, include } = brand;
+  const lines: string[] = [];
+
+  // The Inputs line says how to treat the logo; this says to actually use it.
+  if (include.logo && logoIndex >= 0) {
+    lines.push(
+      `- Logo: show the brand logo (Image ${logoIndex + 1}) once, clearly visible, where a logo naturally belongs unless the prompt says where.`
+    );
+  }
+
+  if (include.palette && section.colors?.length) {
+    const colors = section.colors.map((c) => {
+      const usage = [c.role, c.note].filter((t): t is string => Boolean(t)).map(oneLine).join(": ");
+      return `${c.hex}${usage ? ` (${usage})` : ""}`;
+    });
+    lines.push(`- Palette: ${colors.join("; ")}. Use these colours and no others for the design elements.`);
+  }
+  if (include.style) {
+    if (section.style) lines.push(`- Style: ${oneLine(section.style)}`);
+    if (section.typeFeel) lines.push(`- Typography feel: ${oneLine(section.typeFeel)}`);
+    if (section.dos?.length) lines.push(`- Do: ${section.dos.map(oneLine).join("; ")}.`);
+    if (section.donts?.length) lines.push(`- Don't: ${section.donts.map(oneLine).join("; ")}.`);
+  }
+
+  const lang = section.language;
+  const thai = /^thai$/i.test(lang);
+  lines.push(
+    `- Write all text in ${lang}${thai ? ", with correct spelling and tone marks" : ", spelled correctly"}` +
+      `${include.style && section.typeFeel ? ", in the brand's typography feel" : ""}.` +
+      (hasVerbatimText ? " Text given verbatim below stays exactly as written." : "")
+  );
+
+  return `Brand: ${oneLine(brand.name)}\n${lines.join("\n")}`;
+}
+
+/** Copies the brand fields the enabled chips use into a prompt snapshot. */
+export function brandSnapshot(
+  kit: { colors: BrandColor[]; style: string; typeFeel: string; dos: string[]; donts: string[]; standingText: string },
+  language: string,
+  include: BrandInclude
+): BrandSnapshot {
+  return {
+    language,
+    ...(include.palette && kit.colors.length ? { colors: kit.colors } : {}),
+    ...(include.style && kit.style ? { style: kit.style } : {}),
+    ...(include.style && kit.typeFeel ? { typeFeel: kit.typeFeel } : {}),
+    ...(include.style && kit.dos.length ? { dos: kit.dos } : {}),
+    ...(include.style && kit.donts.length ? { donts: kit.donts } : {}),
+    ...(include.standingText && kit.standingText ? { standingText: kit.standingText } : {}),
+  };
+}
+
+/** What the client may say about the brand: which one and which chips. The kit itself is
+ * always loaded server-side from `id`. */
+export type BrandRequest = { id: string; include: BrandInclude; logoVariant?: LogoVariant };
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const LOGO_VARIANT_IDS = new Set(["primary", "on-dark", "icon"]);
+
+export function sanitizeBrandRequest(raw: unknown): BrandRequest | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  if (typeof r.id !== "string" || !UUID_RE.test(r.id)) return null;
+  const inc = (r.include && typeof r.include === "object" ? r.include : {}) as Record<string, unknown>;
+  const flag = (key: keyof BrandInclude) => (typeof inc[key] === "boolean" ? inc[key] : DEFAULT_BRAND_INCLUDE[key]);
+  const include: BrandInclude = {
+    palette: flag("palette"),
+    style: flag("style"),
+    logo: flag("logo"),
+    standingText: flag("standingText"),
+  };
+  const logoVariant =
+    typeof r.logoVariant === "string" && LOGO_VARIANT_IDS.has(r.logoVariant) ? (r.logoVariant as LogoVariant) : undefined;
+  return { id: r.id, include, ...(logoVariant ? { logoVariant } : {}) };
 }
 
 const ROLE_IDS = new Set<string>(REFERENCE_ROLES.map((r) => r.id));

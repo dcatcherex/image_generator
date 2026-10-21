@@ -225,6 +225,7 @@ export function Home({ readOnly }: { readOnly: boolean }) {
               visibility={panelOptions.visibility}
               isEditing={isEditing}
               setIsEditing={setIsEditing}
+              activeBrand={brandState.activeBrand}
             />
             </fieldset>
           </ScrollArea>

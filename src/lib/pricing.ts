@@ -53,10 +53,16 @@ export type CostEstimate = {
   approximate: boolean;
 };
 
+// Observed input_image_tokens per input image: 704-832 for photo references, 1521 for a brand
+// logo (2026-10-21). Not in the official table, which excludes input images.
+export const INPUT_IMAGE_TOKENS_ESTIMATE = 1000;
+
+type EstimateOptions = { partials?: number; promptChars?: number; inputImages?: number };
+
 export function estimateCost(
   quality: string,
   size: string,
-  { partials = 0, promptChars = 0 }: { partials?: number; promptChars?: number } = {}
+  { partials = 0, promptChars = 0, inputImages = 0 }: EstimateOptions = {}
 ): CostEstimate {
   // "auto" quality/size have no fixed row — OpenAI picks at generation time — so fall back
   // to medium / 1024x1024 and flag the result as approximate.
@@ -67,7 +73,8 @@ export function estimateCost(
   const textTokens = Math.ceil(promptChars / 4);
   const usd =
     (outputTokens * IMAGE_OUTPUT_USD_PER_M + textTokens * TEXT_INPUT_USD_PER_M) / 1_000_000 +
-    previewCostUsd(partials);
+    previewCostUsd(partials) +
+    inputImagesCostUsd(inputImages);
   return {
     usd: Math.round(usd * 10000) / 10000,
     approximate: qualityIndex === -1 || sizeKey !== size,
@@ -162,6 +169,11 @@ export function formatDuration(ms: number): string {
   return `${(ms / 1000).toFixed(1)}s`;
 }
 
+/** Estimated USD for sending `count` input images (references, a brand logo). */
+export function inputImagesCostUsd(count: number): number {
+  return (count * INPUT_IMAGE_TOKENS_ESTIMATE * IMAGE_INPUT_USD_PER_M) / 1_000_000;
+}
+
 /** USD billed for streaming `partials` preview frames. */
 export function previewCostUsd(partials: number): number {
   return (partials * PARTIAL_IMAGE_TOKENS * IMAGE_OUTPUT_USD_PER_M) / 1_000_000;
@@ -183,9 +195,12 @@ export function estimateCostCalibrated(
   model: string,
   quality: string,
   size: string,
-  opts: { partials?: number; promptChars?: number } = {}
+  opts: EstimateOptions = {}
 ): CostEstimate {
   const entry = stats?.[costStatsKey(model, quality, size)];
-  if (entry && entry.count >= CALIBRATION_MIN_COUNT) return { usd: entry.median, approximate: false };
+  // Medians are mostly plain generations, so input images are still added on top.
+  if (entry && entry.count >= CALIBRATION_MIN_COUNT) {
+    return { usd: entry.median + inputImagesCostUsd(opts.inputImages ?? 0), approximate: false };
+  }
   return estimateCost(quality, size, opts);
 }

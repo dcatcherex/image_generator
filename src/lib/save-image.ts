@@ -104,6 +104,8 @@ export async function persistGeneratedImage(params: {
       promptInputs: params.promptInputs ?? null,
       referenceRoles: params.referenceRoles ?? null,
       compareGroupId: params.compareGroupId ?? null,
+      // Taken from the snapshot so every path (generate, edit, batch ingest) tags the image.
+      brandId: params.promptInputs?.brand?.id ?? null,
     })
     .returning();
 

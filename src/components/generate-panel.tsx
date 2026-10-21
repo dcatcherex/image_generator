@@ -38,8 +38,10 @@ import {
 } from "@/lib/pricing";
 import { Input } from "@/components/ui/input";
 import {
+  DEFAULT_BRAND_INCLUDE,
   PRESERVE_OPTIONS,
   defaultReferenceRole,
+  type BrandInclude,
   type PreserveId,
   type PromptInputs,
 } from "@/lib/prompt-builder";
@@ -48,6 +50,7 @@ import { useCostStats } from "@/lib/use-cost-stats";
 import { useLivePreview } from "@/lib/use-live-preview";
 import { ASSIGNABLE_TAGS } from "@/lib/tags";
 import type { useImageStream } from "@/lib/use-image-stream";
+import type { BrandRecord, LogoVariant } from "@/lib/brands";
 import type { PanelOptionVisibility } from "@/lib/use-panel-options";
 import type { ReferenceItem } from "@/lib/reference-items";
 import type { BatchJobRecord, ImageRecord } from "@/lib/types";
@@ -112,6 +115,7 @@ export function GeneratePanel({
   visibility,
   isEditing,
   setIsEditing,
+  activeBrand,
 }: {
   onImageCreated: (image: ImageRecord) => void;
   onBatchSubmitted: (job: BatchJobRecord) => void;
@@ -135,6 +139,8 @@ export function GeneratePanel({
   visibility: PanelOptionVisibility;
   isEditing: boolean;
   setIsEditing: (v: boolean) => void;
+  // The header switcher's brand (null for All / No brand); applied server-side from its id.
+  activeBrand: BrandRecord | null;
 }) {
   const [aspectRatio, setAspectRatio] = useState<string>("auto");
   const [tier, setTier] = useState<SizeTier>("1K");
@@ -148,6 +154,10 @@ export function GeneratePanel({
   const [tag, setTag] = useState<string>(NO_TAG);
   const [economyModeOn, setEconomyMode] = useState(false);
   const [compareToggle, setCompareToggle] = useState(false);
+  // Which brand parts to apply. The chip row that edits these (and picks the logo variant)
+  // comes with the social presets; until then the BRANDS.md defaults apply.
+  const [brandInclude] = useState<BrandInclude>(DEFAULT_BRAND_INCLUDE);
+  const [logoVariant] = useState<LogoVariant | null>(null);
   // Hiding the Economy switch also turns the mode off, so a hidden toggle can't silently
   // keep routing generations through the slow batch path.
   const economyMode = visibility.economy && economyModeOn;
@@ -167,6 +177,20 @@ export function GeneratePanel({
 
   const isEditMode = referenceItems.length > 0;
 
+  // Economy mode only reaches the generations endpoint, which takes no input images, so the
+  // logo drops out there. Otherwise a logo makes this an edit-endpoint request (BRANDS.md).
+  const logoOn = Boolean(
+    activeBrand && brandInclude.logo && !economyMode && activeBrand.logos.length > 0
+  );
+  const usesEditEndpoint = isEditMode || logoOn;
+  const brandRequest = activeBrand
+    ? {
+        id: activeBrand.id,
+        include: { ...brandInclude, logo: logoOn },
+        ...(logoOn && logoVariant ? { logoVariant } : {}),
+      }
+    : null;
+
   // Compression only exists for JPEG/WebP; hiding the slider also stops sending it.
   const compressionApplies = format !== "png";
   const compression = visibility.compression && compressionApplies ? compressionValue : null;
@@ -182,7 +206,7 @@ export function GeneratePanel({
   }
   // Only the instant single-image generate path streams; edits, batches (n > 1) and Economy
   // mode never do, so they never pay for previews.
-  const previewApplies = !isEditMode && !economyMode && n === 1;
+  const previewApplies = !usesEditEndpoint && !economyMode && n === 1;
   // Comparing runs both models as instant single-image generations, so it has the same
   // preconditions as previews.
   const compareOn = visibility.compare && compareToggle && previewApplies;
@@ -194,17 +218,18 @@ export function GeneratePanel({
     return selected?.ratio ? sizeFromAspectRatio(selected.ratio[0], selected.ratio[1], tier) : "auto";
   }, [aspectRatio, tier]);
 
+  const inputImages = referenceItems.length + (logoOn ? 1 : 0);
   const draft = useMemo(() => {
     const estimate = (m: string) =>
-      estimateCostCalibrated(costStats.stats, m, quality, size, { partials, promptChars: prompt.length });
-    const count = isEditMode ? 1 : n;
-    const mult = !isEditMode && economyMode ? BATCH_PRICE_MULTIPLIER : 1;
+      estimateCostCalibrated(costStats.stats, m, quality, size, { partials, promptChars: prompt.length, inputImages });
+    const count = usesEditEndpoint ? 1 : n;
+    const mult = !usesEditEndpoint && economyMode ? BATCH_PRICE_MULTIPLIER : 1;
     const estimates = compareOn ? MODEL.map(estimate) : [estimate(model)];
     return {
       usd: estimates.reduce((sum, e) => sum + e.usd, 0) * count * mult,
       approximate: estimates.some((e) => e.approximate),
     };
-  }, [costStats.stats, model, quality, size, partials, prompt.length, isEditMode, n, economyMode, compareOn]);
+  }, [costStats.stats, model, quality, size, partials, prompt.length, inputImages, usesEditEndpoint, n, economyMode, compareOn]);
 
   // Queued items are only submitted (and thus only priced) in Economy mode, so no
   // separate "instant" branch is needed here the way the draft has one.
@@ -331,7 +356,7 @@ export function GeneratePanel({
         const res = await fetch("/api/batch/generate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ requests }),
+          body: JSON.stringify({ requests, brand: brandRequest }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Batch submission failed");
@@ -358,7 +383,7 @@ export function GeneratePanel({
       // Same payload for both models, tied together by a client-made group id so the pair
       // can be found again later. Each stream reports into its own gallery tile.
       const compareGroupId = crypto.randomUUID();
-      const payload = { promptInputs, size, quality, format, background, compression, n: 1, tag: tagValue, preview: previewOn, compareGroupId };
+      const payload = { promptInputs, brand: brandRequest, size, quality, format, background, compression, n: 1, tag: tagValue, preview: previewOn, compareGroupId };
       const results: ImageRecord[] = [];
       const failures = await Promise.all(
         [generateStream, compareStream].map((stream, i) =>
@@ -382,10 +407,10 @@ export function GeneratePanel({
       return;
     }
 
-    if (!isEditMode) {
+    if (!usesEditEndpoint) {
       let created = 0;
       const failure = await generate(
-        { promptInputs, size, quality, format, background, compression, model, n, tag: tagValue, preview: previewOn },
+        { promptInputs, brand: brandRequest, size, quality, format, background, compression, model, n, tag: tagValue, preview: previewOn },
         (image, warning) => {
           onImageCreated(image);
           created++;
@@ -430,6 +455,7 @@ export function GeneratePanel({
         if (!compositeMask) form.set("compositeMask", "false");
       }
       if (activeParentId) form.set("parentImageId", activeParentId);
+      if (brandRequest) form.set("brand", JSON.stringify(brandRequest));
       if (tagValue) form.set("tag", tagValue);
 
       const res = await fetch("/api/edit", { method: "POST", body: form });
@@ -439,7 +465,7 @@ export function GeneratePanel({
       setParentImageId(null);
       costStats.refresh();
       if (data.warning) toast.warning(data.warning);
-      toast.success("Image edited");
+      toast.success(isEditMode ? "Image edited" : "Image generated");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Edit failed");
     } finally {
@@ -720,7 +746,7 @@ export function GeneratePanel({
         )}
 
         <div className="grid grid-cols-2 gap-3">
-          {!isEditMode && visibility.batch && (
+          {!usesEditEndpoint && visibility.batch && (
             <div className="flex flex-col gap-1.5">
               <Label>Batch (n)</Label>
               <Select value={String(n)} onValueChange={(v) => v && setN(Number(v))}>

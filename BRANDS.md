@@ -85,6 +85,7 @@ Brand: <name>
 - Standing text (chip on) is appended to the verbatim `Text` section, not the Brand section.
 - Logo (chip on): the chosen variant is appended to the reference list with role `logo`. This forces the edit endpoint; the cost estimate must include the extra input image.
 - No brand → output identical to today.
+- As built (step 3): the logo also gets a Brand line telling the model to show it once. Logo-only generations go to `/api/edit` with zero user images and are saved with `sourceType: "generate"`. Economy mode can't use the logo (the Batch API only reaches `/v1/images/generations`), so the panel drops it there and the batch route rejects it. A logo can't be combined with a mask. Public responses strip `brandId`, `promptInputs.brand` and the prompt's `Brand:` section (`stripBrandSection`). Multi-line brand fields are flattened to one line in the prompt. Input image cost estimate: 1000 tokens per image (observed 704–1521).
 
 ### Re-skin
 

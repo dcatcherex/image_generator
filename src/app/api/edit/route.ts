@@ -2,7 +2,8 @@ import { requireOwner } from "@/lib/require-owner";
 import { NextRequest, NextResponse } from "next/server";
 import type OpenAI from "openai";
 import { getOpenAI, MODEL, normalizeCompression, validateFormatBackground, validateSize } from "@/lib/openai";
-import { buildPrompt, defaultReferenceRole, sanitizePromptInputs } from "@/lib/prompt-builder";
+import { buildPrompt, defaultReferenceRole, sanitizeBrandRequest, sanitizePromptInputs } from "@/lib/prompt-builder";
+import { resolveBrand } from "@/lib/brand-prompt";
 import { compositeMaskedEdit } from "@/lib/mask-composite";
 import { persistGeneratedImage, transparencyWarning } from "@/lib/save-image";
 import { actualSizeOr, usageToFields } from "@/lib/pricing";
@@ -54,21 +55,43 @@ export async function POST(req: NextRequest) {
   }
   const compression = normalizeCompression(format, form.get("compression"));
 
-  const files = form.getAll("images").filter((f): f is File => f instanceof File);
-  if (files.length === 0) {
+  let brandRequest = null;
+  try {
+    const json = form.get("brand");
+    if (typeof json === "string" && json) brandRequest = sanitizeBrandRequest(JSON.parse(json));
+  } catch {
+    return NextResponse.json({ error: "brand must be valid JSON" }, { status: 400 });
+  }
+  const brand = brandRequest ? await resolveBrand(brandRequest) : null;
+  if (brand && "error" in brand) return NextResponse.json({ error: brand.error }, { status: 400 });
+  const logo = brand?.logo ?? null;
+
+  const userFiles = form.getAll("images").filter((f): f is File => f instanceof File);
+  // A brand logo alone is enough: that's a branded generation that needs the edit endpoint.
+  if (userFiles.length === 0 && !logo) {
     return NextResponse.json({ error: "At least one reference image is required" }, { status: 400 });
   }
 
   // Roles are aligned with upload order; when the client sent none, default them so the
-  // stored record always has one entry per reference image.
-  if (promptInputs?.referenceRoles && promptInputs.referenceRoles.length !== files.length) {
+  // stored record always has one entry per reference image. The logo always goes last.
+  if (promptInputs?.referenceRoles && promptInputs.referenceRoles.length !== userFiles.length) {
     return NextResponse.json({ error: "referenceRoles must match the number of images" }, { status: 400 });
   }
-  const referenceRoles =
-    promptInputs?.referenceRoles ?? files.map((_, i) => ({ role: defaultReferenceRole(i) }));
-  const prompt = promptInputs ? buildPrompt({ ...promptInputs, referenceRoles }) : base;
+  const userRoles =
+    promptInputs?.referenceRoles ?? userFiles.map((_, i) => ({ role: defaultReferenceRole(i) }));
+  const referenceRoles = logo ? [...userRoles, { role: "logo" as const }] : userRoles;
+  const files = logo ? [...userFiles, logo] : userFiles;
+
+  const inputs =
+    promptInputs || brand
+      ? { ...(promptInputs ?? { base }), referenceRoles, ...(brand ? { brand: brand.input } : {}) }
+      : null;
+  const prompt = inputs ? buildPrompt(inputs) : base;
 
   const mask = form.get("mask");
+  if (mask instanceof File && logo) {
+    return NextResponse.json({ error: "Turn off the Logo chip to edit with a mask" }, { status: 400 });
+  }
   if (mask instanceof File && files.length !== 1) {
     return NextResponse.json(
       { error: "A mask can only be used with a single reference image" },
@@ -133,10 +156,11 @@ export async function POST(req: NextRequest) {
       quality,
       format,
       background,
-      sourceType: "edit",
+      // With only the brand logo as input, the user is generating, not editing an image.
+      sourceType: userFiles.length > 0 ? "edit" : "generate",
       referenceImageIds,
       tag,
-      promptInputs: promptInputs ? { ...promptInputs, referenceRoles } : null,
+      promptInputs: inputs,
       referenceRoles,
       parentImageId,
       previewPartials: 0,
