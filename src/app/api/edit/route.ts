@@ -1,7 +1,7 @@
 import { requireOwner } from "@/lib/require-owner";
 import { NextRequest, NextResponse } from "next/server";
 import type OpenAI from "openai";
-import { getOpenAI, MODEL, normalizeCompression, validateFormatBackground, validateSize } from "@/lib/openai";
+import { complexityParam, getOpenAI, DEFAULT_MODEL, normalizeCompression, validateFormatBackground, validateSize } from "@/lib/openai";
 import { buildPrompt, defaultReferenceRole, sanitizeBrandRequest, sanitizePromptInputs } from "@/lib/prompt-builder";
 import { resolveBrand } from "@/lib/brand-prompt";
 import { compositeMaskedEdit } from "@/lib/mask-composite";
@@ -21,7 +21,8 @@ export async function POST(req: NextRequest) {
   const quality = (form.get("quality") as string) || "medium";
   const format = (form.get("format") as string) || "png";
   const background = (form.get("background") as string) || "auto";
-  const model = (form.get("model") as string) || MODEL[0];
+  const model = (form.get("model") as string) || DEFAULT_MODEL;
+  const complexity = form.get("complexity");
   const referenceImageIds = JSON.parse((form.get("referenceImageIds") as string) || "[]");
   const tag = (form.get("tag") as string) || null;
   // Refine chain link. Not a FK (deleting a parent must not cascade), so just require a UUID.
@@ -113,6 +114,7 @@ export async function POST(req: NextRequest) {
       output_format: format as OpenAI.ImageEditParams["output_format"],
       background: background as OpenAI.ImageEditParams["background"],
       ...(compression != null ? { output_compression: compression } : {}),
+      ...complexityParam(model, complexity),
       n: 1,
       stream: false,
     });

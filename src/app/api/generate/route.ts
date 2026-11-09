@@ -1,6 +1,6 @@
 import { requireOwner } from "@/lib/require-owner";
 import { NextRequest } from "next/server";
-import { getOpenAI, MODEL, normalizeCompression, validateFormatBackground, validateSize } from "@/lib/openai";
+import { complexityParam, getOpenAI, DEFAULT_MODEL, normalizeCompression, validateFormatBackground, validateSize } from "@/lib/openai";
 import { persistGeneratedImage, transparencyWarning } from "@/lib/save-image";
 import { buildPrompt, sanitizeBrandRequest, sanitizePromptInputs } from "@/lib/prompt-builder";
 import { resolveBrand } from "@/lib/brand-prompt";
@@ -26,12 +26,13 @@ export async function POST(req: NextRequest) {
     quality = "medium",
     format = "png",
     background = "auto",
-    model = MODEL[0],
+    model = DEFAULT_MODEL,
     n = 1,
     tag = null,
     preview = false,
     compression: rawCompression = null,
     compareGroupId: rawCompareGroupId = null,
+    complexity = null,
   } = body ?? {};
 
   // Structured inputs are authoritative; a plain `prompt` string stays supported and is
@@ -93,6 +94,7 @@ export async function POST(req: NextRequest) {
         output_format: format,
         ...(compression != null ? { output_compression: compression } : {}),
         background,
+        ...complexityParam(model, complexity),
         n: 1,
         stream: true,
         partial_images: partials,
@@ -166,6 +168,7 @@ export async function POST(req: NextRequest) {
       output_format: format,
       ...(compression != null ? { output_compression: compression } : {}),
       background,
+      ...complexityParam(model, complexity),
       n: count,
       stream: false,
     });

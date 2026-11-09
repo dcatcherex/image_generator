@@ -9,7 +9,12 @@ export function getOpenAI() {
   return _client;
 }
 
-export const MODEL = ["gpt-image-2.5-sunburst", "gpt-image-2.5-flare"] as const;
+export const MODEL = [
+  "gpt-image-2.5-sunburst",
+  "gpt-image-2.5-flare",
+  "gpt-image-2.6-sunburst",
+  "gpt-image-2.6-flare",
+] as const;
 
 /** "gpt-image-2.5-flare" -> "Flare" (for compact labels). */
 export function modelShortName(model: string): string {
@@ -18,6 +23,44 @@ export function modelShortName(model: string): string {
 }
 
 export type ImageModel = (typeof MODEL)[number];
+
+/** Used when a request or the panel doesn't pick a model. */
+export const DEFAULT_MODEL: ImageModel = "gpt-image-2.5-sunburst";
+
+/** "gpt-image-2.6-flare" -> "2.6" ("" when the id doesn't carry a version). */
+export function modelVersion(model: string): string {
+  return /gpt-image-([\d.]+)-/.exec(model)?.[1] ?? "";
+}
+
+/**
+ * The Sunburst/Flare pair a comparison runs: both models of the selected model's version,
+ * Sunburst first so the compare dialog's left/right slots stay stable.
+ */
+export function compareModels(model: string): [ImageModel, ImageModel] {
+  const version = modelVersion(model);
+  const pair = MODEL.filter((m) => modelVersion(m) === version);
+  return pair.length === 2 ? [pair[0], pair[1]] : [MODEL[0], MODEL[1]];
+}
+
+// GPT Image 2.6 `complexity`: how much the model plans before rendering. The API defaults to
+// "high"; lower suits focused edits, higher helps dense text and complex layouts. No fee.
+export const COMPLEXITY_OPTIONS = ["low", "medium", "high"] as const;
+export type Complexity = (typeof COMPLEXITY_OPTIONS)[number];
+export const DEFAULT_COMPLEXITY: Complexity = "high";
+
+export function supportsComplexity(model: string): boolean {
+  return modelVersion(model) === "2.6";
+}
+
+/**
+ * The request fields to spread into an images.generate/edit call. Empty for models that
+ * don't take `complexity` (or an unknown value), so 2.5 requests are unchanged.
+ */
+export function complexityParam(model: string, complexity: unknown): { complexity?: Complexity } {
+  if (!supportsComplexity(model)) return {};
+  if (!COMPLEXITY_OPTIONS.includes(complexity as Complexity)) return {};
+  return { complexity: complexity as Complexity };
+}
 
 export const QUALITY_OPTIONS = ["auto", "low", "medium", "high", "xhigh", "max"] as const;
 

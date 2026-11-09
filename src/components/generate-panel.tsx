@@ -25,8 +25,15 @@ import { ReferenceImagesPicker } from "@/components/reference-images-picker";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   ASPECT_RATIOS,
+  COMPLEXITY_OPTIONS,
+  DEFAULT_COMPLEXITY,
+  DEFAULT_MODEL,
   MODEL,
+  compareModels,
   modelShortName,
+  modelVersion,
+  supportsComplexity,
+  type Complexity,
   N_OPTIONS,
   QUALITY_OPTIONS,
   SIZE_TIERS,
@@ -81,6 +88,7 @@ type QueuedPrompt = {
   background: string;
   compression: number | null;
   model: string;
+  complexity?: Complexity;
   n: number;
   tag: string | null;
 };
@@ -153,7 +161,12 @@ export function GeneratePanel({
   const [background, setBackgroundState] = useState<string>("auto");
   // null = never moved, so nothing is sent and the API default applies.
   const [compressionValue, setCompression] = useState<number | null>(null);
-  const [model, setModel] = useState<string>("gpt-image-2.5-sunburst");
+  const [model, setModel] = useState<string>(DEFAULT_MODEL);
+  const [complexityValue, setComplexity] = useState<Complexity>(DEFAULT_COMPLEXITY);
+  // Only GPT Image 2.6 takes `complexity`; undefined keeps it out of 2.5 requests entirely.
+  const complexity = supportsComplexity(model) ? complexityValue : undefined;
+  // A comparison runs Sunburst vs Flare of the selected model's version.
+  const comparePair = compareModels(model);
   const [n, setN] = useState<number>(1);
   const [tag, setTag] = useState<string>(NO_TAG);
   const [economyModeOn, setEconomyMode] = useState(false);
@@ -239,7 +252,7 @@ export function GeneratePanel({
       estimateCostCalibrated(costStats.stats, m, quality, size, { partials, promptChars: prompt.length, inputImages });
     const count = usesEditEndpoint ? 1 : n;
     const mult = !usesEditEndpoint && economyMode ? BATCH_PRICE_MULTIPLIER : 1;
-    const estimates = compareOn ? MODEL.map(estimate) : [estimate(model)];
+    const estimates = compareOn ? compareModels(model).map(estimate) : [estimate(model)];
     return {
       usd: estimates.reduce((sum, e) => sum + e.usd, 0) * count * mult,
       approximate: estimates.some((e) => e.approximate),
@@ -344,7 +357,7 @@ export function GeneratePanel({
     const tagValue = tag === NO_TAG ? null : tag;
     setQueue((q) => [
       ...q,
-      { id: crypto.randomUUID(), prompt, promptInputs, size, quality, format, background, compression, model, n, tag: tagValue },
+      { id: crypto.randomUUID(), prompt, promptInputs, size, quality, format, background, compression, model, complexity, n, tag: tagValue },
     ]);
     setPrompt("");
     toast.success("Added to queue");
@@ -361,7 +374,7 @@ export function GeneratePanel({
       // The current draft (if any) is submitted alongside whatever's already queued,
       // without requiring an explicit "Add to queue" click first for the common
       // single-prompt case.
-      const draft = prompt.trim() ? [{ prompt, promptInputs, size, quality, format, background, compression, model, n, tag: tagValue }] : [];
+      const draft = prompt.trim() ? [{ prompt, promptInputs, size, quality, format, background, compression, model, complexity, n, tag: tagValue }] : [];
       // Strip the client-only queue id before sending.
       const requests = [
         ...queue.map((item) => {
@@ -408,11 +421,11 @@ export function GeneratePanel({
       // Same payload for both models, tied together by a client-made group id so the pair
       // can be found again later. Each stream reports into its own gallery tile.
       const compareGroupId = crypto.randomUUID();
-      const payload = { promptInputs, brand: brandRequest, size, quality, format, background, compression, n: 1, tag: tagValue, preview: previewOn, compareGroupId };
+      const payload = { promptInputs, brand: brandRequest, size, quality, format, background, compression, complexity, n: 1, tag: tagValue, preview: previewOn, compareGroupId };
       const results: ImageRecord[] = [];
       const failures = await Promise.all(
         [generateStream, compareStream].map((stream, i) =>
-          stream.generate({ ...payload, model: MODEL[i] }, (image, warning) => {
+          stream.generate({ ...payload, model: comparePair[i] }, (image, warning) => {
             onImageCreated(image);
             results.push(image);
             if (warning) toast.warning(warning);
@@ -420,9 +433,9 @@ export function GeneratePanel({
         )
       );
       costStats.refresh();
-      if (results.length === MODEL.length) {
-        // Order by MODEL so the dialog's left/right slots are stable.
-        onCompareDone([...results].sort((a, b) => MODEL.indexOf(a.model as (typeof MODEL)[number]) - MODEL.indexOf(b.model as (typeof MODEL)[number])));
+      if (results.length === comparePair.length) {
+        // Order by the pair (Sunburst first) so the dialog's left/right slots are stable.
+        onCompareDone([...results].sort((a, b) => comparePair.indexOf(a.model as (typeof MODEL)[number]) - comparePair.indexOf(b.model as (typeof MODEL)[number])));
       } else if (results.length > 0) {
         const reason = failures.find(Boolean);
         toast.error(`One of the two models failed — the other image was kept in the gallery${reason ? `: ${reason}` : ""}`);
@@ -435,7 +448,7 @@ export function GeneratePanel({
     if (!usesEditEndpoint) {
       let created = 0;
       const failure = await generate(
-        { promptInputs, brand: brandRequest, size, quality, format, background, compression, model, n, tag: tagValue, preview: previewOn },
+        { promptInputs, brand: brandRequest, size, quality, format, background, compression, model, complexity, n, tag: tagValue, preview: previewOn },
         (image, warning) => {
           onImageCreated(image);
           created++;
@@ -470,6 +483,7 @@ export function GeneratePanel({
       form.set("background", background);
       if (compression != null) form.set("compression", String(compression));
       form.set("model", model);
+      if (complexity) form.set("complexity", complexity);
       form.set(
         "referenceImageIds",
         JSON.stringify(referenceItems.map((r) => r.sourceImageId).filter(Boolean))
@@ -745,7 +759,7 @@ export function GeneratePanel({
             <div className="flex flex-col">
               <Label htmlFor="compare-models" className="text-sm">Compare models</Label>
               <span className="text-xs text-muted-foreground">
-                {MODEL.map(modelShortName).join(" vs ")}, same settings
+                GPT Image {modelVersion(comparePair[0])}: {comparePair.map(modelShortName).join(" vs ")}, same settings
               </span>
             </div>
             <Switch
@@ -866,6 +880,29 @@ export function GeneratePanel({
               </SelectContent>
             </Select>
           </div>}
+          {visibility.complexity && complexity && (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <div className="flex flex-col gap-1.5">
+                    <Label>Complexity</Label>
+                    <Select value={complexityValue} onValueChange={(v) => v && setComplexity(v as Complexity)}>
+                      <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {COMPLEXITY_OPTIONS.map((c) => (
+                          <SelectItem key={c} value={c}>{c}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                }
+              />
+              <TooltipContent>
+                How much the model plans before rendering (no extra cost). Low suits focused edits;
+                high helps dense text and complex layouts but is slower and can change more.
+              </TooltipContent>
+            </Tooltip>
+          )}
           {visibility.format && <div className="flex flex-col gap-1.5">
             <Label>Format</Label>
             <Select value={format} onValueChange={(v) => v && setFormat(v)}>

@@ -80,6 +80,9 @@ const SECTIONS: Array<{ id: string; label: string; icon: typeof BookOpen; body: 
         <P>
           <K>Sunburst</K> is the larger model, tuned for quality. <K>Flare</K> is the smaller one, tuned for speed, with quality close to GPT Image 2. Both cost the same per token. Start with Sunburst for demanding work, then try Flare on the same prompt to see if it&apos;s good enough and faster. <K>Compare models</K> does exactly that in one click.
         </P>
+        <P>
+          Each comes in two versions, GPT Image 2.5 and 2.6. The 2.6 models add a <K>Complexity</K> setting (low, medium, high; default high) for how much the model plans before rendering. It costs nothing extra. Use <K>low</K> for small edits like swapping a background; keep <K>high</K> for dense text and busy layouts, though it&apos;s slower and may change more than you asked.
+        </P>
         <H>Refine one thing at a time</H>
         <P>
           Inspect each result, then change one thing: the prompt, the quality, or the model. For an image that&apos;s close, use <K>Refine</K> to edit it rather than generating from scratch.
@@ -186,7 +189,7 @@ const SECTIONS: Array<{ id: string; label: string; icon: typeof BookOpen; body: 
     body: () => (
       <>
         <P>
-          Turn on <K>Compare models</K> to run the same prompt and settings on Sunburst and Flare at the same time. When both finish, a <K>Model comparison</K> window shows them side by side with each one&apos;s cost and generation time.
+          Turn on <K>Compare models</K> to run the same prompt and settings on Sunburst and Flare (of the selected model&apos;s version) at the same time. When both finish, a <K>Model comparison</K> window shows them side by side with each one&apos;s cost and generation time.
         </P>
         <List>
           <li><K>Keep both</K> closes the window; both images stay in the gallery.</li>

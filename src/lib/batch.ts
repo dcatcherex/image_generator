@@ -2,6 +2,7 @@
 // results within up to 24h, no guarantee of speed). This is a separate, opt-in path from
 // the normal instant `/api/generate` flow; it never touches that flow's code.
 
+import { complexityParam } from "./openai";
 import type { ImageUsage } from "./pricing";
 import type { PromptInputs } from "./prompt-builder";
 
@@ -17,6 +18,8 @@ export type BatchRequestMeta = {
   // Optional for jobs submitted before these existed (stored in the batch_jobs.requests jsonb).
   compression?: number | null;
   promptInputs?: PromptInputs | null;
+  // GPT Image 2.6 only; ignored for other models.
+  complexity?: string | null;
 };
 
 // Terminal statuses that mean "nothing left to do" for a batch row — either its images
@@ -39,6 +42,7 @@ export function buildBatchJsonl(requests: BatchRequestMeta[]): string {
           output_format: r.format,
           background: r.background,
           ...(r.compression != null ? { output_compression: r.compression } : {}),
+          ...complexityParam(r.model, r.complexity),
           n: 1,
         },
       })

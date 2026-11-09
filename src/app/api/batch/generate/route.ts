@@ -2,7 +2,7 @@ import { requireOwner } from "@/lib/require-owner";
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { toFile } from "openai";
-import { getOpenAI, MODEL, normalizeCompression, validateFormatBackground, validateSize } from "@/lib/openai";
+import { getOpenAI, DEFAULT_MODEL, normalizeCompression, validateFormatBackground, validateSize } from "@/lib/openai";
 import { getDb } from "@/db";
 import { batchJobs } from "@/db/schema";
 import { buildPrompt, sanitizeBrandRequest, sanitizePromptInputs } from "@/lib/prompt-builder";
@@ -24,6 +24,7 @@ type QueuedRequest = {
   n?: number;
   tag?: string | null;
   compression?: number | null;
+  complexity?: unknown;
 };
 
 export async function POST(req: NextRequest) {
@@ -66,7 +67,8 @@ export async function POST(req: NextRequest) {
         quality: item.quality || "medium",
         format,
         background: item.background || "auto",
-        model: item.model || MODEL[0],
+        model: item.model || DEFAULT_MODEL,
+        complexity: typeof item.complexity === "string" ? item.complexity : null,
         tag: item.tag ?? null,
         compression: normalizeCompression(format, item.compression),
       });
