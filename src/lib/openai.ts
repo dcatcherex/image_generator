@@ -25,7 +25,7 @@ export function modelShortName(model: string): string {
 export type ImageModel = (typeof MODEL)[number];
 
 /** Used when a request or the panel doesn't pick a model. */
-export const DEFAULT_MODEL: ImageModel = "gpt-image-2.5-sunburst";
+export const DEFAULT_MODEL: ImageModel = "gpt-image-2.6-sunburst";
 
 /** "gpt-image-2.6-flare" -> "2.6" ("" when the id doesn't carry a version). */
 export function modelVersion(model: string): string {
@@ -50,6 +50,28 @@ export const DEFAULT_COMPLEXITY: Complexity = "high";
 
 export function supportsComplexity(model: string): boolean {
   return modelVersion(model) === "2.6";
+}
+
+/**
+ * SVG output (2.6 only): generations only, n=1, no streaming/partials/compression. The API
+ * renders a reference image (`quality` and `complexity` apply to it) and a separate author
+ * model writes the SVG from it.
+ */
+export function supportsSvg(model: string): boolean {
+  return modelVersion(model) === "2.6";
+}
+
+/**
+ * Rejects an SVG with anything active in it. The API documents static output (no scripts,
+ * external resources or embedded rasters), but the file is served publicly and opened
+ * directly by the download link, so check rather than trust.
+ */
+export function unsafeSvgReason(svg: string): string | null {
+  if (!/<svg[\s>]/i.test(svg)) return "The returned file isn't an SVG";
+  if (/<script[\s>]|<foreignObject[\s>]|\son[a-z]+\s*=|javascript:/i.test(svg)) {
+    return "The returned SVG contains active content and was not saved";
+  }
+  return null;
 }
 
 /**

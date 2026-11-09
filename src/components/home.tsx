@@ -208,6 +208,8 @@ export function Home({ readOnly }: { readOnly: boolean }) {
           setColumns={galleryView.setColumns}
           panelVisibility={panelOptions.visibility}
           setPanelOptionVisible={panelOptions.setOptionVisible}
+          defaultModel={panelOptions.defaultModel}
+          setDefaultModel={panelOptions.setDefaultModel}
         />
         {!readOnly && <UserButton />}
       </div>
@@ -277,6 +279,7 @@ export function Home({ readOnly }: { readOnly: boolean }) {
               parentImageId={parentImageId}
               setParentImageId={setParentImageId}
               visibility={panelOptions.visibility}
+              defaultModel={panelOptions.defaultModel}
               isEditing={isEditing}
               setIsEditing={setIsEditing}
               activeBrand={brandState.activeBrand}

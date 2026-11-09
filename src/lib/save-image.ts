@@ -11,6 +11,7 @@ import type { ImageRecord } from "./types";
 function contentTypeFor(format: string) {
   if (format === "webp") return "image/webp";
   if (format === "jpeg") return "image/jpeg";
+  if (format === "svg") return "image/svg+xml";
   return "image/png";
 }
 
@@ -62,7 +63,7 @@ export async function persistGeneratedImage(params: {
   // Transparent backgrounds sometimes come back opaque; check the decoded pixels rather than
   // trusting the request. A decode failure just leaves the check unknown.
   let transparencyOk = params.transparencyOk ?? null;
-  if (params.background === "transparent") {
+  if (params.background === "transparent" && params.format !== "svg") {
     try {
       transparencyOk = !(await sharp(buffer).stats()).isOpaque;
     } catch (err) {

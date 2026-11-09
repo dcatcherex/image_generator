@@ -20,6 +20,8 @@ import {
 import { PANEL_OPTIONS, type PanelOptionId, type PanelOptionVisibility } from "@/lib/use-panel-options";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { MODEL } from "@/lib/openai";
 import { cn } from "cn";
 
 const THEME_OPTIONS = [
@@ -42,6 +44,8 @@ export function SettingsDialog({
   setColumns,
   panelVisibility,
   setPanelOptionVisible,
+  defaultModel,
+  setDefaultModel,
 }: {
   view: GalleryViewMode;
   setView: (v: GalleryViewMode) => void;
@@ -49,6 +53,8 @@ export function SettingsDialog({
   setColumns: (n: number) => void;
   panelVisibility: PanelOptionVisibility;
   setPanelOptionVisible: (id: PanelOptionId, visible: boolean) => void;
+  defaultModel: string;
+  setDefaultModel: (model: string) => void;
 }) {
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
@@ -156,6 +162,20 @@ export function SettingsDialog({
             <p className="mb-4 text-xs text-muted-foreground">
               Hidden options keep their current value.
             </p>
+            <div className="mb-4 flex items-center justify-between gap-4">
+              <div className="flex flex-col">
+                <Label className="text-sm font-normal">Default model</Label>
+                <span className="text-xs text-muted-foreground">The model the panel starts on</span>
+              </div>
+              <Select value={defaultModel} onValueChange={(v) => v && setDefaultModel(v)}>
+                <SelectTrigger className="w-56"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {MODEL.map((m) => (
+                    <SelectItem key={m} value={m}>{m}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="flex flex-col gap-3">
               {PANEL_OPTIONS.map((option) => (
                 <div key={option.id} className="flex items-center justify-between gap-4">

@@ -1,6 +1,6 @@
 import { requireOwner } from "@/lib/require-owner";
 import { NextRequest } from "next/server";
-import { complexityParam, getOpenAI, DEFAULT_MODEL, normalizeCompression, validateFormatBackground, validateSize } from "@/lib/openai";
+import { complexityParam, getOpenAI, DEFAULT_MODEL, normalizeCompression, supportsSvg, unsafeSvgReason, validateFormatBackground, validateSize } from "@/lib/openai";
 import { persistGeneratedImage, transparencyWarning } from "@/lib/save-image";
 import { buildPrompt, sanitizeBrandRequest, sanitizePromptInputs } from "@/lib/prompt-builder";
 import { resolveBrand } from "@/lib/brand-prompt";
@@ -64,13 +64,21 @@ export async function POST(req: NextRequest) {
   if (formatError) {
     return new Response(JSON.stringify({ error: formatError }), { status: 400 });
   }
-  const compression = normalizeCompression(format, rawCompression);
+  const isSvg = format === "svg";
+  if (isSvg && !supportsSvg(model)) {
+    return new Response(JSON.stringify({ error: "SVG output needs a GPT Image 2.6 model" }), { status: 400 });
+  }
+  // SVG takes no compression and no background (the author model decides what to draw).
+  const compression = isSvg ? null : normalizeCompression(format, rawCompression);
+  const backgroundFields = isSvg ? {} : { background };
+  const storedBackground = isSvg ? "auto" : background;
   // Shared by the two images of a model comparison; anything that isn't a UUID is ignored.
   const compareGroupId =
     typeof rawCompareGroupId === "string" && UUID_RE.test(rawCompareGroupId) ? rawCompareGroupId : null;
 
   // OpenAI supports n up to 10, but we cap at 4 to match the UI's n selector.
-  const count = Math.min(Math.max(Number(n) || 1, 1), 4);
+  // SVG output requires n=1.
+  const count = isSvg ? 1 : Math.min(Math.max(Number(n) || 1, 1), 4);
 
   // What is actually sent (empty for 2.5), so the stored value matches the request.
   const complexityFields = complexityParam(model, complexity);
@@ -86,7 +94,8 @@ export async function POST(req: NextRequest) {
     // the plain non-streaming call, emitting one "done" event per image as it's
     // persisted so the gallery fills in progressively. n === 1 keeps the original
     // live partial-preview streaming path unchanged.
-    if (count === 1) {
+    // SVG doesn't stream, so it takes the plain call below even for one image.
+    if (count === 1 && !isSvg) {
       const partials = preview ? PREVIEW_PARTIALS : 0;
       const t0 = Date.now();
       const events = await openai.images.generate({
@@ -148,7 +157,7 @@ export async function POST(req: NextRequest) {
         quality,
         complexity: complexityFields.complexity ?? null,
         format,
-        background,
+        background: storedBackground,
         sourceType: "generate",
         tag,
         previewPartials: partials,
@@ -171,7 +180,7 @@ export async function POST(req: NextRequest) {
       quality,
       output_format: format,
       ...(compression != null ? { output_compression: compression } : {}),
-      background,
+      ...backgroundFields,
       ...complexityFields,
       n: count,
       stream: false,
@@ -187,6 +196,13 @@ export async function POST(req: NextRequest) {
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
       if (!item.b64_json) continue;
+      if (isSvg) {
+        const reason = unsafeSvgReason(Buffer.from(item.b64_json, "base64").toString("utf-8"));
+        if (reason) {
+          emit({ type: "error", message: reason });
+          continue;
+        }
+      }
       const image = await persistGeneratedImage({
         b64: item.b64_json,
         prompt,
@@ -197,7 +213,7 @@ export async function POST(req: NextRequest) {
         quality,
         complexity: complexityFields.complexity ?? null,
         format,
-        background,
+        background: storedBackground,
         sourceType: "generate",
         tag,
         previewPartials: 0,

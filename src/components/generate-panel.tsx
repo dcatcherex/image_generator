@@ -27,12 +27,12 @@ import {
   ASPECT_RATIOS,
   COMPLEXITY_OPTIONS,
   DEFAULT_COMPLEXITY,
-  DEFAULT_MODEL,
   MODEL,
   compareModels,
   modelShortName,
   modelVersion,
   supportsComplexity,
+  supportsSvg,
   type Complexity,
   N_OPTIONS,
   QUALITY_OPTIONS,
@@ -125,6 +125,7 @@ export function GeneratePanel({
   parentImageId,
   setParentImageId,
   visibility,
+  defaultModel,
   isEditing,
   setIsEditing,
   activeBrand,
@@ -149,6 +150,8 @@ export function GeneratePanel({
   parentImageId: string | null;
   setParentImageId: (v: string | null) => void;
   visibility: PanelOptionVisibility;
+  // Settings → Default model. The panel starts on it and follows it when it changes.
+  defaultModel: string;
   isEditing: boolean;
   setIsEditing: (v: boolean) => void;
   // The header switcher's brand (null for All / No brand); applied server-side from its id.
@@ -157,17 +160,26 @@ export function GeneratePanel({
   const [aspectRatio, setAspectRatio] = useState<string>("auto");
   const [tier, setTier] = useState<SizeTier>("1K");
   const [quality, setQuality] = useState<string>("high");
-  const [format, setFormat] = useState<string>("webp");
+  // What the user picked; `format` below is what is actually sent (SVG can fall back to PNG).
+  const [formatValue, setFormat] = useState<string>("webp");
   const [background, setBackgroundState] = useState<string>("auto");
   // null = never moved, so nothing is sent and the API default applies.
   const [compressionValue, setCompression] = useState<number | null>(null);
-  const [model, setModel] = useState<string>(DEFAULT_MODEL);
+  // null = follow the default model; a pick in the Model select overrides it for this session.
+  const [modelOverride, setModel] = useState<string | null>(null);
+  const model = modelOverride ?? defaultModel;
+  // Changing the default in Settings clears the override, so the panel switches to it.
+  const [prevDefaultModel, setPrevDefaultModel] = useState(defaultModel);
+  if (prevDefaultModel !== defaultModel) {
+    setPrevDefaultModel(defaultModel);
+    setModel(null);
+  }
   const [complexityValue, setComplexity] = useState<Complexity>(DEFAULT_COMPLEXITY);
   // Only GPT Image 2.6 takes `complexity`; undefined keeps it out of 2.5 requests entirely.
   const complexity = supportsComplexity(model) ? complexityValue : undefined;
   // A comparison runs Sunburst vs Flare of the selected model's version.
   const comparePair = compareModels(model);
-  const [n, setN] = useState<number>(1);
+  const [nValue, setN] = useState<number>(1);
   const [tag, setTag] = useState<string>(NO_TAG);
   const [economyModeOn, setEconomyMode] = useState(false);
   const [compareToggle, setCompareToggle] = useState(false);
@@ -219,8 +231,16 @@ export function GeneratePanel({
       }
     : null;
 
+  // SVG output is 2.6-only and generation-only (no reference images or logo), and Economy
+  // mode's Batch API path doesn't take it. When it doesn't apply, PNG is sent instead.
+  const svgAvailable = supportsSvg(model) && !usesEditEndpoint && !economyMode;
+  const format = formatValue === "svg" && !svgAvailable ? "png" : formatValue;
+  const isSvg = format === "svg";
+  // SVG requires n=1.
+  const n = isSvg ? 1 : nValue;
+
   // Compression only exists for JPEG/WebP; hiding the slider also stops sending it.
-  const compressionApplies = format !== "png";
+  const compressionApplies = format !== "png" && !isSvg;
   const compression = visibility.compression && compressionApplies ? compressionValue : null;
 
   // JPEG can't carry alpha, so picking Transparent while on JPEG falls back to PNG. (The
@@ -238,7 +258,8 @@ export function GeneratePanel({
   // Comparing runs both models as instant single-image generations, so it has the same
   // preconditions as previews.
   const compareOn = visibility.compare && compareToggle && previewApplies;
-  const previewOn = visibility.preview && livePreview.preview && previewApplies;
+  // SVG output doesn't stream, so there are no preview frames to show.
+  const previewOn = visibility.preview && livePreview.preview && previewApplies && !isSvg;
   const partials = previewOn ? PREVIEW_PARTIALS : 0;
 
   const size = useMemo(() => {
@@ -280,7 +301,8 @@ export function GeneratePanel({
 
   const cost = draft.usd + queueCost.usd;
   // "~" only in front of table-based values; calibrated medians are real recorded costs.
-  const costIsApproximate = draft.approximate || queueCost.approximate;
+  // SVG also bills the SVG author model's tokens, which the table can't predict.
+  const costIsApproximate = draft.approximate || queueCost.approximate || isSvg;
 
   const queuedImageCount = queue.reduce((sum, item) => sum + item.n, 0) + (!isEditMode && economyMode && prompt.trim() ? n : 0);
 
@@ -771,7 +793,7 @@ export function GeneratePanel({
           </div>
         )}
 
-        {visibility.preview && previewApplies && (
+        {visibility.preview && previewApplies && !isSvg && (
           <div className="flex items-center justify-between rounded-md border px-3 py-2">
             <div className="flex flex-col">
               <Label htmlFor="live-preview" className="text-sm">Live preview</Label>
@@ -829,7 +851,7 @@ export function GeneratePanel({
         {/* Three columns only while the panel is a wide single column (tablet tabs); the
             340px desktop sidebar stays at two. */}
         <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-2">
-          {!usesEditEndpoint && visibility.batch && (
+          {!usesEditEndpoint && visibility.batch && !isSvg && (
             <div className="flex flex-col gap-1.5">
               <Label>Batch (n)</Label>
               <Select value={String(n)} onValueChange={(v) => v && setN(Number(v))}>
@@ -906,18 +928,25 @@ export function GeneratePanel({
           )}
           {visibility.format && <div className="flex flex-col gap-1.5">
             <Label>Format</Label>
-            <Select value={format} onValueChange={(v) => v && setFormat(v)}>
+            <Select value={formatValue} onValueChange={(v) => v && setFormat(v)}>
               <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="png">PNG</SelectItem>
                 <SelectItem value="jpeg" disabled={background === "transparent"}>JPEG</SelectItem>
                 <SelectItem value="webp">WebP</SelectItem>
+                <SelectItem value="svg" disabled={!svgAvailable}>SVG (2.6)</SelectItem>
               </SelectContent>
             </Select>
+            {formatValue === "svg" && !svgAvailable && (
+              <span className="text-xs text-muted-foreground">
+                SVG needs a 2.6 model, no reference images or logo, and Economy off. Using PNG.
+              </span>
+            )}
           </div>}
           {visibility.background && <div className="flex flex-col gap-1.5">
             <Label>Background</Label>
-            <Select value={background} onValueChange={(v) => v && setBackground(v)}>
+            {/* SVG output takes no background setting; the author model decides what to draw. */}
+            <Select value={background} onValueChange={(v) => v && setBackground(v)} disabled={isSvg}>
               <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="auto">Auto</SelectItem>

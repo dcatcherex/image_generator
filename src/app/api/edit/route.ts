@@ -51,6 +51,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: sizeError }, { status: 400 });
   }
 
+  if (format === "svg") {
+    return NextResponse.json({ error: "SVG output is only available for new generations, not edits" }, { status: 400 });
+  }
   const formatError = validateFormatBackground(format, background);
   if (formatError) {
     return NextResponse.json({ error: formatError }, { status: 400 });

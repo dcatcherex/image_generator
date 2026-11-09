@@ -145,6 +145,10 @@ const SECTIONS: Array<{ id: string; label: string; icon: typeof BookOpen; body: 
         <P>
           <K>PNG</K> is lossless and supports transparency. <K>WebP</K> is smaller and also supports transparency. <K>JPEG</K> is smallest but can&apos;t be transparent. <K>Compression</K> (JPEG and WebP only) trades quality for file size; leave it untouched to use OpenAI&apos;s default.
         </P>
+        <H>SVG (vector) output</H>
+        <P>
+          With a GPT Image 2.6 model, <K>SVG (2.6)</K> returns editable vector paths instead of pixels: good for logos, icons and simple illustrations you&apos;ll recolor or scale. The model first draws a reference image (<K>Quality</K> and <K>Complexity</K> apply to it), then a second model traces it into SVG, so the price is approximate. SVG makes one image at a time with no live preview, and only for new generations: not with reference images, the brand logo, or Economy mode. Using an SVG as a reference later sends a PNG rendering of it.
+        </P>
         <H>Transparent backgrounds</H>
         <P>
           Set <K>Background</K> to <K>Transparent</K> and use PNG or WebP (JPEG is disabled while Transparent is selected). Also say so in the prompt: “isolated on a fully transparent background, no shadow”. After generating, the app checks the real pixels; a red badge on the card means the model returned a solid background anyway. Try again, or edit with the <K>Product cutout</K> preset.

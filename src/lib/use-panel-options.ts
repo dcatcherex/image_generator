@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { DEFAULT_MODEL, MODEL } from "@/lib/openai";
 
 export const PANEL_OPTIONS = [
   { id: "presets", label: "Presets" },
@@ -25,6 +26,11 @@ export type PanelOptionId = (typeof PANEL_OPTIONS)[number]["id"];
 export type PanelOptionVisibility = Record<PanelOptionId, boolean>;
 
 const STORAGE_KEY = "panel-options-visibility";
+const DEFAULT_MODEL_KEY = "panel-default-model";
+
+function isKnownModel(value: unknown): value is string {
+  return typeof value === "string" && (MODEL as readonly string[]).includes(value);
+}
 
 const DEFAULT_VISIBILITY = Object.fromEntries(
   PANEL_OPTIONS.map((o) => [o.id, true])
@@ -34,6 +40,8 @@ const DEFAULT_VISIBILITY = Object.fromEntries(
 // value; they just aren't rendered. Persisted per browser like the gallery view settings.
 export function usePanelOptions() {
   const [visibility, setVisibility] = useState<PanelOptionVisibility>(DEFAULT_VISIBILITY);
+  // The model the generate panel starts on. A stored id that's no longer offered is ignored.
+  const [defaultModel, setDefaultModelState] = useState<string>(DEFAULT_MODEL);
 
   // Mount-time read to avoid a hydration mismatch with the server-rendered defaults.
   useEffect(() => {
@@ -42,7 +50,19 @@ export function usePanelOptions() {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       if (raw) setVisibility({ ...DEFAULT_VISIBILITY, ...JSON.parse(raw) });
     } catch {}
+    try {
+      const stored = localStorage.getItem(DEFAULT_MODEL_KEY);
+      if (isKnownModel(stored)) setDefaultModelState(stored);
+    } catch {}
   }, []);
+
+  function setDefaultModel(model: string) {
+    if (!isKnownModel(model)) return;
+    setDefaultModelState(model);
+    try {
+      localStorage.setItem(DEFAULT_MODEL_KEY, model);
+    } catch {}
+  }
 
   function setOptionVisible(id: PanelOptionId, visible: boolean) {
     setVisibility((prev) => {
@@ -54,5 +74,5 @@ export function usePanelOptions() {
     });
   }
 
-  return { visibility, setOptionVisible };
+  return { visibility, setOptionVisible, defaultModel, setDefaultModel };
 }
