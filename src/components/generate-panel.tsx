@@ -249,7 +249,7 @@ export function GeneratePanel({
   const inputImages = referenceItems.length + (logoOn ? 1 : 0);
   const draft = useMemo(() => {
     const estimate = (m: string) =>
-      estimateCostCalibrated(costStats.stats, m, quality, size, { partials, promptChars: prompt.length, inputImages });
+      estimateCostCalibrated(costStats.stats, m, quality, size, { partials, promptChars: prompt.length, inputImages, complexity });
     const count = usesEditEndpoint ? 1 : n;
     const mult = !usesEditEndpoint && economyMode ? BATCH_PRICE_MULTIPLIER : 1;
     const estimates = compareOn ? compareModels(model).map(estimate) : [estimate(model)];
@@ -257,7 +257,7 @@ export function GeneratePanel({
       usd: estimates.reduce((sum, e) => sum + e.usd, 0) * count * mult,
       approximate: estimates.some((e) => e.approximate),
     };
-  }, [costStats.stats, model, quality, size, partials, prompt.length, inputImages, usesEditEndpoint, n, economyMode, compareOn]);
+  }, [costStats.stats, model, quality, size, partials, prompt.length, inputImages, usesEditEndpoint, n, economyMode, compareOn, complexity]);
 
   // Queued items are only submitted (and thus only priced) in Economy mode, so no
   // separate "instant" branch is needed here the way the draft has one.
@@ -267,6 +267,7 @@ export function GeneratePanel({
       (acc, item) => {
         const one = estimateCostCalibrated(costStats.stats, item.model, item.quality, item.size, {
           promptChars: item.prompt.length,
+          complexity: item.complexity,
         });
         return {
           usd: acc.usd + one.usd * item.n * BATCH_PRICE_MULTIPLIER,

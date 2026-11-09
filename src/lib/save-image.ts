@@ -30,6 +30,7 @@ export async function persistGeneratedImage(params: {
   model: string;
   size: string;
   quality: string;
+  complexity?: string | null;
   format: string;
   background: string;
   sourceType: "generate" | "edit";
@@ -83,6 +84,7 @@ export async function persistGeneratedImage(params: {
       model: params.model,
       size: params.size,
       quality: params.quality,
+      complexity: params.complexity ?? null,
       format: params.format,
       background: params.background,
       blobUrl: blob.url,

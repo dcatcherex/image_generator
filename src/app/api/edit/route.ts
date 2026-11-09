@@ -22,7 +22,8 @@ export async function POST(req: NextRequest) {
   const format = (form.get("format") as string) || "png";
   const background = (form.get("background") as string) || "auto";
   const model = (form.get("model") as string) || DEFAULT_MODEL;
-  const complexity = form.get("complexity");
+  // What is actually sent (empty for 2.5), so the stored value matches the request.
+  const complexityFields = complexityParam(model, form.get("complexity"));
   const referenceImageIds = JSON.parse((form.get("referenceImageIds") as string) || "[]");
   const tag = (form.get("tag") as string) || null;
   // Refine chain link. Not a FK (deleting a parent must not cascade), so just require a UUID.
@@ -114,7 +115,7 @@ export async function POST(req: NextRequest) {
       output_format: format as OpenAI.ImageEditParams["output_format"],
       background: background as OpenAI.ImageEditParams["background"],
       ...(compression != null ? { output_compression: compression } : {}),
-      ...complexityParam(model, complexity),
+      ...complexityFields,
       n: 1,
       stream: false,
     });
@@ -156,6 +157,7 @@ export async function POST(req: NextRequest) {
       size: finalSize,
       requestedSize: size,
       quality,
+      complexity: complexityFields.complexity ?? null,
       format,
       background,
       // With only the brand logo as input, the user is generating, not editing an image.

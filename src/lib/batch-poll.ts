@@ -5,6 +5,7 @@ import { getOpenAI } from "@/lib/openai";
 import { persistGeneratedImage } from "@/lib/save-image";
 import { actualSizeOr, usageToFields } from "@/lib/pricing";
 import { TERMINAL_BATCH_STATUSES, parseBatchOutputJsonl } from "@/lib/batch";
+import { complexityParam } from "@/lib/openai";
 
 /**
  * Checks every non-terminal batch_jobs row against OpenAI, updates status/counts, and — the
@@ -90,6 +91,7 @@ export async function checkAndIngestPendingBatches(): Promise<{
                 size: actualSizeOr(meta.size, line.response?.body?.size),
                 requestedSize: meta.size,
                 quality: meta.quality,
+                complexity: complexityParam(meta.model, meta.complexity).complexity ?? null,
                 format: meta.format,
                 background: meta.background,
                 sourceType: "generate",

@@ -179,14 +179,15 @@ export function previewCostUsd(partials: number): number {
   return (partials * PARTIAL_IMAGE_TOKENS * IMAGE_OUTPUT_USD_PER_M) / 1_000_000;
 }
 
-/** Median actual cost per "model|quality|requested_size" from GET /api/cost-stats. */
+/** Median actual cost per "model|quality|requested_size[|complexity]" from GET /api/cost-stats. */
 export type CostStats = Record<string, { median: number; count: number }>;
 
 /** Minimum recorded rows before a median replaces the table estimate. */
 export const CALIBRATION_MIN_COUNT = 3;
 
-export function costStatsKey(model: string, quality: string, requestedSize: string): string {
-  return `${model}|${quality}|${requestedSize}`;
+/** Complexity is appended only when set, so keys for 2.5 rows are unchanged. */
+export function costStatsKey(model: string, quality: string, requestedSize: string, complexity?: string | null): string {
+  return complexity ? `${model}|${quality}|${requestedSize}|${complexity}` : `${model}|${quality}|${requestedSize}`;
 }
 
 /** Table estimate, replaced by the recorded median when there are enough real rows. */
@@ -195,9 +196,9 @@ export function estimateCostCalibrated(
   model: string,
   quality: string,
   size: string,
-  opts: EstimateOptions = {}
+  opts: EstimateOptions & { complexity?: string | null } = {}
 ): CostEstimate {
-  const entry = stats?.[costStatsKey(model, quality, size)];
+  const entry = stats?.[costStatsKey(model, quality, size, opts.complexity)];
   // Medians are mostly plain generations, so input images are still added on top.
   if (entry && entry.count >= CALIBRATION_MIN_COUNT) {
     return { usd: entry.median + inputImagesCostUsd(opts.inputImages ?? 0), approximate: false };

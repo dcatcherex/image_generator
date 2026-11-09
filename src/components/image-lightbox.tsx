@@ -263,6 +263,9 @@ export function ImageLightbox({
         <div className="flex flex-wrap gap-1.5 text-xs text-muted-foreground">
           <Badge variant="outline" className="text-[10px]">{image.size}</Badge>
           <Badge variant="outline" className="text-[10px]">{image.quality}</Badge>
+          {image.complexity && (
+            <Badge variant="outline" className="text-[10px]">complexity {image.complexity}</Badge>
+          )}
           <Badge variant="outline" className="text-[10px]">{image.model}</Badge>
         </div>
 

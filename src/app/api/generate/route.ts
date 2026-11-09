@@ -72,6 +72,9 @@ export async function POST(req: NextRequest) {
   // OpenAI supports n up to 10, but we cap at 4 to match the UI's n selector.
   const count = Math.min(Math.max(Number(n) || 1, 1), 4);
 
+  // What is actually sent (empty for 2.5), so the stored value matches the request.
+  const complexityFields = complexityParam(model, complexity);
+
   const openai = getOpenAI();
 
   const stream = sseStreamFromEvents(async (emit) => {
@@ -94,7 +97,7 @@ export async function POST(req: NextRequest) {
         output_format: format,
         ...(compression != null ? { output_compression: compression } : {}),
         background,
-        ...complexityParam(model, complexity),
+        ...complexityFields,
         n: 1,
         stream: true,
         partial_images: partials,
@@ -143,6 +146,7 @@ export async function POST(req: NextRequest) {
         size: actualSizeOr(size, reportedSize),
         requestedSize: size,
         quality,
+        complexity: complexityFields.complexity ?? null,
         format,
         background,
         sourceType: "generate",
@@ -168,7 +172,7 @@ export async function POST(req: NextRequest) {
       output_format: format,
       ...(compression != null ? { output_compression: compression } : {}),
       background,
-      ...complexityParam(model, complexity),
+      ...complexityFields,
       n: count,
       stream: false,
     });
@@ -191,6 +195,7 @@ export async function POST(req: NextRequest) {
         size: actualSizeOr(size, response.size),
         requestedSize: size,
         quality,
+        complexity: complexityFields.complexity ?? null,
         format,
         background,
         sourceType: "generate",

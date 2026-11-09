@@ -10,6 +10,8 @@ export const images = pgTable("images", {
   model: text("model").notNull(),
   size: text("size").notNull(),
   quality: text("quality").notNull(),
+  // GPT Image 2.6 `complexity` (low | medium | high); null for models that don't take it.
+  complexity: text("complexity"),
   format: text("format").notNull().default("png"),
   background: text("background").notNull().default("auto"),
   blobUrl: text("blob_url").notNull(),

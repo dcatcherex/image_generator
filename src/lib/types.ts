@@ -7,6 +7,8 @@ export type ImageRecord = {
   model: string;
   size: string;
   quality: string;
+  // GPT Image 2.6 only; null for other models and rows that predate it.
+  complexity: string | null;
   format: string;
   background: string;
   blobUrl: string;
@@ -54,6 +56,7 @@ export type BatchJobRecord = {
     model: string;
     tag: string | null;
     compression?: number | null;
+    complexity?: string | null;
     promptInputs?: PromptInputs | null;
   }>;
   createdAt: string;
