@@ -53,8 +53,8 @@ export async function POST(req: NextRequest) {
     const sizeError = validateSize(item.size || "1024x1024");
     if (sizeError) return NextResponse.json({ error: sizeError }, { status: 400 });
     const format = item.format || "png";
-    if (format === "svg") {
-      return NextResponse.json({ error: "SVG output isn't available in Economy mode" }, { status: 400 });
+    if (format === "svg" || format === "gif") {
+      return NextResponse.json({ error: `${format.toUpperCase()} output isn't available in Economy mode` }, { status: 400 });
     }
     const formatError = validateFormatBackground(format, item.background || "auto");
     if (formatError) return NextResponse.json({ error: formatError }, { status: 400 });

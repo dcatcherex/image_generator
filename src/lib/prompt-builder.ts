@@ -73,6 +73,9 @@ export type PromptInputs = {
   referenceRoles?: ReferenceRoleEntry[]; // edit only, in upload order (a brand logo is last)
   // Server-resolved from the brand id (see src/lib/brand-prompt.ts); never taken from the client.
   brand?: BrandPromptInput;
+  // Set by /api/edit when a markup layer was uploaded with the request; never taken from the
+  // client's promptInputs (sanitizePromptInputs drops it).
+  markup?: boolean;
 };
 
 /** Default role for the reference at `index`: the first is the subject, the rest "other". */
@@ -119,6 +122,12 @@ export function buildPrompt(inputs: PromptInputs): string {
 
   const changeOnly = inputs.changeOnly?.trim();
   if (changeOnly) sections.push(`Change only: ${changeOnly}`);
+
+  if (inputs.markup) {
+    sections.push(
+      "Markup: Image 1 comes with a separate annotation layer. Its drawn marks (circles, arrows, scribbles) show where to apply the change. Apply it only there, keep everything else unchanged, and do not draw the marks in the result."
+    );
+  }
 
   const preserve = (inputs.preserve ?? [])
     .map((id): string | undefined => PRESERVE_OPTIONS.find((o) => o.id === id)?.text)

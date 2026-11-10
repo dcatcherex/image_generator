@@ -62,6 +62,39 @@ export function supportsSvg(model: string): boolean {
 }
 
 /**
+ * Animated GIF output (2.6 only): generations and edits, no streaming/partials/compression
+ * and no mask. `size` is per frame; frames x frame size x n must fit the model's pixel
+ * budget, so we keep n=1.
+ */
+export function supportsGif(model: string): boolean {
+  return modelVersion(model) === "2.6";
+}
+
+export const GIF_FRAMES = { min: 2, max: 16, default: 9 } as const;
+export const GIF_FRAME_MS = { min: 20, max: 2000, default: 200, step: 10 } as const;
+
+export type GifSettings = { frameCount: number; frameDurationMs: number };
+
+/** Clamps GIF settings to the documented ranges (duration rounded to 10 ms, as the API does). */
+export function normalizeGif(frameCount: unknown, frameDurationMs: unknown): GifSettings {
+  const frames = Number(frameCount);
+  const ms = Number(frameDurationMs);
+  return {
+    frameCount: Number.isFinite(frames)
+      ? Math.min(Math.max(Math.round(frames), GIF_FRAMES.min), GIF_FRAMES.max)
+      : GIF_FRAMES.default,
+    frameDurationMs: Number.isFinite(ms)
+      ? Math.min(Math.max(Math.round(ms / 10) * 10, GIF_FRAME_MS.min), GIF_FRAME_MS.max)
+      : GIF_FRAME_MS.default,
+  };
+}
+
+/** The request fields for GIF output. */
+export function gifParams(gif: GifSettings) {
+  return { frame_count: gif.frameCount, frame_duration_ms: gif.frameDurationMs };
+}
+
+/**
  * Rejects an SVG with anything active in it. The API documents static output (no scripts,
  * external resources or embedded rasters), but the file is served publicly and opened
  * directly by the download link, so check rather than trust.

@@ -12,6 +12,7 @@ function contentTypeFor(format: string) {
   if (format === "webp") return "image/webp";
   if (format === "jpeg") return "image/jpeg";
   if (format === "svg") return "image/svg+xml";
+  if (format === "gif") return "image/gif";
   return "image/png";
 }
 
@@ -32,6 +33,8 @@ export async function persistGeneratedImage(params: {
   size: string;
   quality: string;
   complexity?: string | null;
+  frameCount?: number | null;
+  frameDurationMs?: number | null;
   format: string;
   background: string;
   sourceType: "generate" | "edit";
@@ -75,6 +78,7 @@ export async function persistGeneratedImage(params: {
   const cost = estimateCost(params.quality, params.requestedSize ?? params.size, {
     partials: params.previewPartials ?? 0,
     promptChars: params.prompt.length,
+    frames: params.frameCount ?? 1,
   }).usd.toString();
 
   const [row] = await db
@@ -86,6 +90,8 @@ export async function persistGeneratedImage(params: {
       size: params.size,
       quality: params.quality,
       complexity: params.complexity ?? null,
+      frameCount: params.frameCount ?? null,
+      frameDurationMs: params.frameDurationMs ?? null,
       format: params.format,
       background: params.background,
       blobUrl: blob.url,

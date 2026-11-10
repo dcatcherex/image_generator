@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ChevronDown, Loader2, Maximize, Paintbrush2, Plus, Sparkles, X } from "lucide-react";
+import { ChevronDown, Loader2, Maximize, Paintbrush2, PenLine, Plus, Sparkles, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -21,6 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { MaskEditor } from "@/components/mask-editor";
+import { MarkupEditor } from "@/components/markup-editor";
 import { ReferenceImagesPicker } from "@/components/reference-images-picker";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -33,6 +34,9 @@ import {
   modelVersion,
   supportsComplexity,
   supportsSvg,
+  supportsGif,
+  GIF_FRAMES,
+  GIF_FRAME_MS,
   type Complexity,
   N_OPTIONS,
   QUALITY_OPTIONS,
@@ -180,6 +184,8 @@ export function GeneratePanel({
   // A comparison runs Sunburst vs Flare of the selected model's version.
   const comparePair = compareModels(model);
   const [nValue, setN] = useState<number>(1);
+  const [gifFrames, setGifFrames] = useState<number>(GIF_FRAMES.default);
+  const [gifFrameMs, setGifFrameMs] = useState<number>(GIF_FRAME_MS.default);
   const [tag, setTag] = useState<string>(NO_TAG);
   const [economyModeOn, setEconomyMode] = useState(false);
   const [compareToggle, setCompareToggle] = useState(false);
@@ -198,6 +204,9 @@ export function GeneratePanel({
   const [maskOwnerKey, setMaskOwnerKey] = useState<string | null>(null);
   const [maskEditorOpen, setMaskEditorOpen] = useState(false);
   const [compositeMask, setCompositeMask] = useState(true);
+  const [markupFile, setMarkupFile] = useState<File | null>(null);
+  const [markupOwnerKey, setMarkupOwnerKey] = useState<string | null>(null);
+  const [markupEditorOpen, setMarkupEditorOpen] = useState(false);
   // A preset waiting on the user's OK because it would overwrite a non-empty prompt.
   const [exactTextOpen, setExactTextOpen] = useState(false);
   const [pendingPreset, setPendingPreset] = useState<PromptPreset | null>(null);
@@ -211,6 +220,10 @@ export function GeneratePanel({
 
   const maskableItem = referenceItems.length === 1 ? referenceItems[0] : null;
   const activeMask = maskableItem && maskableItem.key === maskOwnerKey ? maskFile : null;
+  // Markup is drawn over the first reference image; any others stay plain references. Like the
+  // mask, it belongs to the image it was drawn on and drops out if that image changes.
+  const markupItem = referenceItems[0] ?? null;
+  const activeMarkup = markupItem && markupItem.key === markupOwnerKey ? markupFile : null;
 
   // Economy mode only reaches the generations endpoint, which takes no input images, and a
   // mask needs a single input image, so the logo drops out for both. Otherwise a logo makes
@@ -234,13 +247,20 @@ export function GeneratePanel({
   // SVG output is 2.6-only and generation-only (no reference images or logo), and Economy
   // mode's Batch API path doesn't take it. When it doesn't apply, PNG is sent instead.
   const svgAvailable = supportsSvg(model) && !usesEditEndpoint && !economyMode;
-  const format = formatValue === "svg" && !svgAvailable ? "png" : formatValue;
+  // GIF output is 2.6-only and works for generations and edits (references guide the
+  // animation), but not with a mask or in Economy mode.
+  const gifAvailable = supportsGif(model) && !economyMode && !activeMask;
+  const format =
+    (formatValue === "svg" && !svgAvailable) || (formatValue === "gif" && !gifAvailable) ? "png" : formatValue;
   const isSvg = format === "svg";
-  // SVG requires n=1.
-  const n = isSvg ? 1 : nValue;
+  const isGif = format === "gif";
+  // SVG requires n=1; GIF keeps n=1 so frames x size stays inside the pixel budget.
+  const n = isSvg || isGif ? 1 : nValue;
+  // Sent only for GIF output (the API rejects frame fields otherwise).
+  const gifPayload = isGif ? { frameCount: gifFrames, frameDurationMs: gifFrameMs } : {};
 
   // Compression only exists for JPEG/WebP; hiding the slider also stops sending it.
-  const compressionApplies = format !== "png" && !isSvg;
+  const compressionApplies = format !== "png" && !isSvg && !isGif;
   const compression = visibility.compression && compressionApplies ? compressionValue : null;
 
   // JPEG can't carry alpha, so picking Transparent while on JPEG falls back to PNG. (The
@@ -258,8 +278,9 @@ export function GeneratePanel({
   // Comparing runs both models as instant single-image generations, so it has the same
   // preconditions as previews.
   const compareOn = visibility.compare && compareToggle && previewApplies;
-  // SVG output doesn't stream, so there are no preview frames to show.
-  const previewOn = visibility.preview && livePreview.preview && previewApplies && !isSvg;
+  // SVG and GIF output don't stream, so there are no preview frames to show.
+  const streams = !isSvg && !isGif;
+  const previewOn = visibility.preview && livePreview.preview && previewApplies && streams;
   const partials = previewOn ? PREVIEW_PARTIALS : 0;
 
   const size = useMemo(() => {
@@ -270,7 +291,15 @@ export function GeneratePanel({
   const inputImages = referenceItems.length + (logoOn ? 1 : 0);
   const draft = useMemo(() => {
     const estimate = (m: string) =>
-      estimateCostCalibrated(costStats.stats, m, quality, size, { partials, promptChars: prompt.length, inputImages, complexity });
+      estimateCostCalibrated(costStats.stats, m, quality, size, {
+        partials,
+        promptChars: prompt.length,
+        inputImages,
+        complexity,
+        format,
+        frameCount: isGif ? gifFrames : null,
+        frames: isGif ? gifFrames : 1,
+      });
     const count = usesEditEndpoint ? 1 : n;
     const mult = !usesEditEndpoint && economyMode ? BATCH_PRICE_MULTIPLIER : 1;
     const estimates = compareOn ? compareModels(model).map(estimate) : [estimate(model)];
@@ -278,7 +307,7 @@ export function GeneratePanel({
       usd: estimates.reduce((sum, e) => sum + e.usd, 0) * count * mult,
       approximate: estimates.some((e) => e.approximate),
     };
-  }, [costStats.stats, model, quality, size, partials, prompt.length, inputImages, usesEditEndpoint, n, economyMode, compareOn, complexity]);
+  }, [costStats.stats, model, quality, size, partials, prompt.length, inputImages, usesEditEndpoint, n, economyMode, compareOn, complexity, format, isGif, gifFrames]);
 
   // Queued items are only submitted (and thus only priced) in Economy mode, so no
   // separate "instant" branch is needed here the way the draft has one.
@@ -444,7 +473,7 @@ export function GeneratePanel({
       // Same payload for both models, tied together by a client-made group id so the pair
       // can be found again later. Each stream reports into its own gallery tile.
       const compareGroupId = crypto.randomUUID();
-      const payload = { promptInputs, brand: brandRequest, size, quality, format, background, compression, complexity, n: 1, tag: tagValue, preview: previewOn, compareGroupId };
+      const payload = { promptInputs, brand: brandRequest, size, quality, format, background, compression, complexity, ...gifPayload, n: 1, tag: tagValue, preview: previewOn, compareGroupId };
       const results: ImageRecord[] = [];
       const failures = await Promise.all(
         [generateStream, compareStream].map((stream, i) =>
@@ -471,7 +500,7 @@ export function GeneratePanel({
     if (!usesEditEndpoint) {
       let created = 0;
       const failure = await generate(
-        { promptInputs, brand: brandRequest, size, quality, format, background, compression, model, complexity, n, tag: tagValue, preview: previewOn },
+        { promptInputs, brand: brandRequest, size, quality, format, background, compression, model, complexity, ...gifPayload, n, tag: tagValue, preview: previewOn },
         (image, warning) => {
           onImageCreated(image);
           created++;
@@ -506,12 +535,17 @@ export function GeneratePanel({
       form.set("background", background);
       if (compression != null) form.set("compression", String(compression));
       form.set("model", model);
+      if (isGif) {
+        form.set("frameCount", String(gifFrames));
+        form.set("frameDurationMs", String(gifFrameMs));
+      }
       if (complexity) form.set("complexity", complexity);
       form.set(
         "referenceImageIds",
         JSON.stringify(referenceItems.map((r) => r.sourceImageId).filter(Boolean))
       );
       referenceItems.forEach((item) => form.append("images", item.file));
+      if (activeMarkup) form.set("markup", activeMarkup);
       if (activeMask) {
         form.set("mask", activeMask);
         if (!compositeMask) form.set("compositeMask", "false");
@@ -695,6 +729,39 @@ export function GeneratePanel({
           )}
           <ReferenceImagesPicker items={referenceItems} onChange={setReferenceItems} />
 
+          {markupItem && (
+            <div className="flex items-center gap-2 rounded-md border px-3 py-2">
+              <PenLine className="size-3.5 text-muted-foreground shrink-0" />
+              <span className="flex-1 text-xs text-muted-foreground">
+                {activeMarkup
+                  ? "Markup on image 1: describe the change in the prompt"
+                  : "No markup: circle what to change on image 1"}
+              </span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => setMarkupEditorOpen(true)}
+                disabled={Boolean(activeMask)}
+                title={activeMask ? "Clear the mask to use markup" : undefined}
+              >
+                {activeMarkup ? "Edit markup" : "Draw markup"}
+              </Button>
+              {activeMarkup && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => setMarkupFile(null)}
+                >
+                  Clear
+                </Button>
+              )}
+            </div>
+          )}
+
           {maskableItem && (
             <div className="flex flex-col gap-1.5 rounded-md border px-3 py-2">
             <div className="flex items-center gap-2">
@@ -708,6 +775,10 @@ export function GeneratePanel({
                 size="sm"
                 className="h-7 text-xs"
                 onClick={() => setMaskEditorOpen(true)}
+                disabled={Boolean(activeMarkup) || isGif}
+                title={
+                  activeMarkup ? "Clear the markup to use a mask" : isGif ? "GIF output can't use a mask" : undefined
+                }
               >
                 {activeMask ? "Edit mask" : "Draw mask"}
               </Button>
@@ -738,6 +809,19 @@ export function GeneratePanel({
           )}
         </div>
       </div>
+
+      {markupItem && (
+        <MarkupEditor
+          open={markupEditorOpen}
+          onOpenChange={setMarkupEditorOpen}
+          imageUrl={markupItem.previewUrl}
+          initialMarkup={activeMarkup}
+          onSave={(file) => {
+            setMarkupFile(file);
+            setMarkupOwnerKey(markupItem.key);
+          }}
+        />
+      )}
 
       {maskableItem && (
         <MaskEditor
@@ -793,7 +877,7 @@ export function GeneratePanel({
           </div>
         )}
 
-        {visibility.preview && previewApplies && !isSvg && (
+        {visibility.preview && previewApplies && streams && (
           <div className="flex items-center justify-between rounded-md border px-3 py-2">
             <div className="flex flex-col">
               <Label htmlFor="live-preview" className="text-sm">Live preview</Label>
@@ -851,7 +935,7 @@ export function GeneratePanel({
         {/* Three columns only while the panel is a wide single column (tablet tabs); the
             340px desktop sidebar stays at two. */}
         <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-2">
-          {!usesEditEndpoint && visibility.batch && !isSvg && (
+          {!usesEditEndpoint && visibility.batch && !isSvg && !isGif && (
             <div className="flex flex-col gap-1.5">
               <Label>Batch (n)</Label>
               <Select value={String(n)} onValueChange={(v) => v && setN(Number(v))}>
@@ -935,11 +1019,17 @@ export function GeneratePanel({
                 <SelectItem value="jpeg" disabled={background === "transparent"}>JPEG</SelectItem>
                 <SelectItem value="webp">WebP</SelectItem>
                 <SelectItem value="svg" disabled={!svgAvailable}>SVG (2.6)</SelectItem>
+                <SelectItem value="gif" disabled={!gifAvailable}>GIF (2.6)</SelectItem>
               </SelectContent>
             </Select>
             {formatValue === "svg" && !svgAvailable && (
               <span className="text-xs text-muted-foreground">
                 SVG needs a 2.6 model, no reference images or logo, and Economy off. Using PNG.
+              </span>
+            )}
+            {formatValue === "gif" && !gifAvailable && (
+              <span className="text-xs text-muted-foreground">
+                GIF needs a 2.6 model, no mask, and Economy off. Using PNG.
               </span>
             )}
           </div>}
@@ -956,6 +1046,41 @@ export function GeneratePanel({
             </Select>
           </div>}
         </div>
+
+        {isGif && (
+          <div className="flex flex-col gap-3 rounded-md border px-3 py-2">
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <Label>Frames</Label>
+                <span className="text-xs text-muted-foreground">{gifFrames}</span>
+              </div>
+              <Slider
+                min={GIF_FRAMES.min}
+                max={GIF_FRAMES.max}
+                step={1}
+                value={[gifFrames]}
+                onValueChange={(v) => setGifFrames(Array.isArray(v) ? v[0] : v)}
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <Label>Frame duration</Label>
+                <span className="text-xs text-muted-foreground">{gifFrameMs} ms</span>
+              </div>
+              <Slider
+                min={GIF_FRAME_MS.min}
+                max={GIF_FRAME_MS.max}
+                step={GIF_FRAME_MS.step}
+                value={[gifFrameMs]}
+                onValueChange={(v) => setGifFrameMs(Array.isArray(v) ? v[0] : v)}
+              />
+            </div>
+            <span className="text-xs text-muted-foreground">
+              Loop: {((gifFrames * gifFrameMs) / 1000).toFixed(1)} s. Describe the motion and how it loops in the
+              prompt. Size is per frame; if you hit a size limit, use Auto size or fewer frames.
+            </span>
+          </div>
+        )}
 
         {visibility.compression && compressionApplies && (
           <div className="flex flex-col gap-2">

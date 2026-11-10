@@ -57,19 +57,21 @@ export type CostEstimate = {
 // logo (2026-10-21). Not in the official table, which excludes input images.
 export const INPUT_IMAGE_TOKENS_ESTIMATE = 1000;
 
-type EstimateOptions = { partials?: number; promptChars?: number; inputImages?: number };
+// `frames` > 1 is an animated GIF: assumed to cost one still per frame (a rough guess until
+// calibrated from real rows), so the result is flagged approximate.
+type EstimateOptions = { partials?: number; promptChars?: number; inputImages?: number; frames?: number };
 
 export function estimateCost(
   quality: string,
   size: string,
-  { partials = 0, promptChars = 0, inputImages = 0 }: EstimateOptions = {}
+  { partials = 0, promptChars = 0, inputImages = 0, frames = 1 }: EstimateOptions = {}
 ): CostEstimate {
   // "auto" quality/size have no fixed row — OpenAI picks at generation time — so fall back
   // to medium / 1024x1024 and flag the result as approximate.
   const qualityIndex = QUALITIES.indexOf(quality as (typeof QUALITIES)[number]);
   const dims = parseWxH(size);
   const sizeKey = !dims ? "1024x1024" : OUTPUT_TOKENS[size] ? size : nearestDocumentedSize(dims[0], dims[1]);
-  const outputTokens = OUTPUT_TOKENS[sizeKey][qualityIndex === -1 ? 1 : qualityIndex];
+  const outputTokens = OUTPUT_TOKENS[sizeKey][qualityIndex === -1 ? 1 : qualityIndex] * Math.max(frames, 1);
   const textTokens = Math.ceil(promptChars / 4);
   const usd =
     (outputTokens * IMAGE_OUTPUT_USD_PER_M + textTokens * TEXT_INPUT_USD_PER_M) / 1_000_000 +
@@ -77,7 +79,7 @@ export function estimateCost(
     inputImagesCostUsd(inputImages);
   return {
     usd: Math.round(usd * 10000) / 10000,
-    approximate: qualityIndex === -1 || sizeKey !== size,
+    approximate: qualityIndex === -1 || sizeKey !== size || frames > 1,
   };
 }
 
@@ -179,15 +181,29 @@ export function previewCostUsd(partials: number): number {
   return (partials * PARTIAL_IMAGE_TOKENS * IMAGE_OUTPUT_USD_PER_M) / 1_000_000;
 }
 
-/** Median actual cost per "model|quality|requested_size[|complexity]" from GET /api/cost-stats. */
+/** Median actual cost per costStatsKey() from GET /api/cost-stats. */
 export type CostStats = Record<string, { median: number; count: number }>;
 
 /** Minimum recorded rows before a median replaces the table estimate. */
 export const CALIBRATION_MIN_COUNT = 3;
 
-/** Complexity is appended only when set, so keys for 2.5 rows are unchanged. */
-export function costStatsKey(model: string, quality: string, requestedSize: string, complexity?: string | null): string {
-  return complexity ? `${model}|${quality}|${requestedSize}|${complexity}` : `${model}|${quality}|${requestedSize}`;
+export type CostStatsVariant = {
+  complexity?: string | null;
+  format?: string | null;
+  frameCount?: number | null;
+};
+
+/**
+ * "model|quality|requested_size", plus a suffix for anything that changes the token count:
+ * complexity (2.6), SVG (adds the SVG author's tokens) and GIF frame count. Suffixes are only
+ * added when set, so keys for plain 2.5 stills are unchanged.
+ */
+export function costStatsKey(model: string, quality: string, requestedSize: string, variant: CostStatsVariant = {}): string {
+  let key = `${model}|${quality}|${requestedSize}`;
+  if (variant.complexity) key += `|${variant.complexity}`;
+  if (variant.format === "svg") key += "|svg";
+  if (variant.format === "gif") key += `|gif${variant.frameCount ?? ""}`;
+  return key;
 }
 
 /** Table estimate, replaced by the recorded median when there are enough real rows. */
@@ -196,9 +212,9 @@ export function estimateCostCalibrated(
   model: string,
   quality: string,
   size: string,
-  opts: EstimateOptions & { complexity?: string | null } = {}
+  opts: EstimateOptions & CostStatsVariant = {}
 ): CostEstimate {
-  const entry = stats?.[costStatsKey(model, quality, size, opts.complexity)];
+  const entry = stats?.[costStatsKey(model, quality, size, opts)];
   // Medians are mostly plain generations, so input images are still added on top.
   if (entry && entry.count >= CALIBRATION_MIN_COUNT) {
     return { usd: entry.median + inputImagesCostUsd(opts.inputImages ?? 0), approximate: false };

@@ -9,6 +9,9 @@ export type ImageRecord = {
   quality: string;
   // GPT Image 2.6 only; null for other models and rows that predate it.
   complexity: string | null;
+  // Animated GIF output only; null for stills.
+  frameCount: number | null;
+  frameDurationMs: number | null;
   format: string;
   background: string;
   blobUrl: string;

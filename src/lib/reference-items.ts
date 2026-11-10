@@ -46,6 +46,25 @@ async function rasterizeSvg(blob: Blob): Promise<Blob> {
   }
 }
 
+/**
+ * The first frame of an animated GIF as a PNG at the GIF's own size (edits don't take GIF
+ * input). createImageBitmap decodes a single frame, unlike an <img> that keeps animating.
+ */
+async function firstFrameAsPng(blob: Blob): Promise<Blob> {
+  const bitmap = await createImageBitmap(blob);
+  try {
+    const canvas = document.createElement("canvas");
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    canvas.getContext("2d")!.drawImage(bitmap, 0, 0);
+    return await new Promise<Blob>((resolve, reject) =>
+      canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("Couldn't read the GIF"))), "image/png")
+    );
+  } finally {
+    bitmap.close();
+  }
+}
+
 export async function referenceItemFromImage(image: ImageRecord): Promise<ReferenceItem> {
   const res = await fetch(image.blobUrl);
   let blob = await res.blob();
@@ -54,6 +73,10 @@ export async function referenceItemFromImage(image: ImageRecord): Promise<Refere
   if (image.format === "svg") {
     blob = await rasterizeSvg(blob);
     ext = "png";
+  } else if (image.format === "gif") {
+    // Same for an animation: its first frame goes in as a still.
+    blob = await firstFrameAsPng(blob);
+    ext = "png";
   }
   const file = new File([blob], `${image.id}.${ext}`, {
     type: blob.type || `image/${ext}`,
@@ -61,7 +84,9 @@ export async function referenceItemFromImage(image: ImageRecord): Promise<Refere
   return {
     key: `gallery-${image.id}`,
     file,
-    previewUrl: image.blobUrl,
+    // For an SVG or GIF, preview the PNG that's actually sent, so a mask or markup drawn over the
+    // preview has that file's exact dimensions.
+    previewUrl: ext === image.format ? image.blobUrl : URL.createObjectURL(file),
     sourceImageId: image.id,
   };
 }

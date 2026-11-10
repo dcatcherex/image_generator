@@ -149,6 +149,10 @@ const SECTIONS: Array<{ id: string; label: string; icon: typeof BookOpen; body: 
         <P>
           With a GPT Image 2.6 model, <K>SVG (2.6)</K> returns editable vector paths instead of pixels: good for logos, icons and simple illustrations you&apos;ll recolor or scale. The model first draws a reference image (<K>Quality</K> and <K>Complexity</K> apply to it), then a second model traces it into SVG, so the price is approximate. SVG makes one image at a time with no live preview, and only for new generations: not with reference images, the brand logo, or Economy mode. Using an SVG as a reference later sends a PNG rendering of it.
         </P>
+        <H>Animated GIF output</H>
+        <P>
+          With a GPT Image 2.6 model, <K>GIF (2.6)</K> makes a short looping animation. Set <K>Frames</K> (2 to 16) and <K>Frame duration</K>; the loop length is shown below them. Describe the subject, the motion and how it loops in the prompt (&quot;the cat blinks, then returns to the starting pose&quot;). Add reference images to animate an existing picture. Size is per frame, so large sizes with many frames can hit the model&apos;s limit: use Auto size or fewer frames if that happens. GIF makes one animation at a time, with no live preview, no compression, no mask, and not in Economy mode. Its price is a rough guess (one still per frame) until you&apos;ve made a few. Using a GIF as a reference later sends its first frame.
+        </P>
         <H>Transparent backgrounds</H>
         <P>
           Set <K>Background</K> to <K>Transparent</K> and use PNG or WebP (JPEG is disabled while Transparent is selected). Also say so in the prompt: “isolated on a fully transparent background, no shadow”. After generating, the app checks the real pixels; a red badge on the card means the model returned a solid background anyway. Try again, or edit with the <K>Product cutout</K> preset.
@@ -177,6 +181,10 @@ const SECTIONS: Array<{ id: string; label: string; icon: typeof BookOpen; body: 
         <H>Refine and versions</H>
         <P>
           <K>Refine</K> (on a card or in the lightbox) starts a follow-up edit of that one image and carries its Change only and preserve settings forward. Ask for one change per step. Every image in a refine chain shows a <K>Versions</K> strip in the lightbox, oldest first, so you can go back to any step. <K>Use as reference</K> is different: it adds the image to the current references without linking versions.
+        </P>
+        <H>Markup: circle what to change</H>
+        <P>
+          <K>Draw markup</K> lets you circle, point at or scribble on the first reference image, then say in the prompt what to do there (&quot;make the circled vase cobalt blue&quot;). It&apos;s quicker than a mask when you just need to point at something, and the model removes the marks from the result. Use a bright pen color that doesn&apos;t appear in the picture, and keep the prompt specific about what to keep. Markup works with extra reference images and the brand logo, but not together with a mask. It costs nothing extra.
         </P>
         <H>Masks: edit one area only</H>
         <P>

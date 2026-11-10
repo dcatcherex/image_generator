@@ -1,7 +1,7 @@
 import { requireOwner } from "@/lib/require-owner";
 import { NextRequest, NextResponse } from "next/server";
 import type OpenAI from "openai";
-import { complexityParam, getOpenAI, DEFAULT_MODEL, normalizeCompression, validateFormatBackground, validateSize } from "@/lib/openai";
+import { complexityParam, getOpenAI, DEFAULT_MODEL, gifParams, normalizeCompression, normalizeGif, supportsGif, validateFormatBackground, validateSize } from "@/lib/openai";
 import { buildPrompt, defaultReferenceRole, sanitizeBrandRequest, sanitizePromptInputs } from "@/lib/prompt-builder";
 import { resolveBrand } from "@/lib/brand-prompt";
 import { compositeMaskedEdit } from "@/lib/mask-composite";
@@ -9,6 +9,9 @@ import { persistGeneratedImage, transparencyWarning } from "@/lib/save-image";
 import { actualSizeOr, usageToFields } from "@/lib/pricing";
 
 export const maxDuration = 300;
+
+// Documented size limit for the markup (annotation) file.
+const MAX_MARKUP_BYTES = 50 * 1024 * 1024;
 
 export async function POST(req: NextRequest) {
   const denied = await requireOwner();
@@ -58,7 +61,13 @@ export async function POST(req: NextRequest) {
   if (formatError) {
     return NextResponse.json({ error: formatError }, { status: 400 });
   }
-  const compression = normalizeCompression(format, form.get("compression"));
+  // GIF from stills: the reference images guide the animation.
+  const isGif = format === "gif";
+  if (isGif && !supportsGif(model)) {
+    return NextResponse.json({ error: "GIF output needs a GPT Image 2.6 model" }, { status: 400 });
+  }
+  const gif = isGif ? normalizeGif(form.get("frameCount"), form.get("frameDurationMs")) : null;
+  const compression = isGif ? null : normalizeCompression(format, form.get("compression"));
 
   let brandRequest = null;
   try {
@@ -87,13 +96,40 @@ export async function POST(req: NextRequest) {
   const referenceRoles = logo ? [...userRoles, { role: "logo" as const }] : userRoles;
   const files = logo ? [...userFiles, logo] : userFiles;
 
+  // Markup-guided edit: a transparent PNG of annotations over the first image. A brand logo,
+  // if any, stays a plain reference since it's appended last.
+  const markupEntry = form.get("markup");
+  const markup = markupEntry instanceof File ? markupEntry : null;
+  const mask = form.get("mask");
+  if (isGif && mask instanceof File) {
+    return NextResponse.json({ error: "GIF output can't be used with a mask" }, { status: 400 });
+  }
+  if (markup) {
+    if (mask instanceof File) {
+      return NextResponse.json({ error: "Use either a mask or markup, not both" }, { status: 400 });
+    }
+    if (userFiles.length === 0) {
+      return NextResponse.json({ error: "Markup needs a reference image to draw on" }, { status: 400 });
+    }
+    if (markup.type !== "image/png") {
+      return NextResponse.json({ error: "Markup must be a PNG" }, { status: 400 });
+    }
+    if (markup.size > MAX_MARKUP_BYTES) {
+      return NextResponse.json({ error: "Markup must be under 50 MB" }, { status: 400 });
+    }
+  }
+
   const inputs =
-    promptInputs || brand
-      ? { ...(promptInputs ?? { base }), referenceRoles, ...(brand ? { brand: brand.input } : {}) }
+    promptInputs || brand || markup
+      ? {
+          ...(promptInputs ?? { base }),
+          referenceRoles,
+          ...(brand ? { brand: brand.input } : {}),
+          ...(markup ? { markup: true } : {}),
+        }
       : null;
   const prompt = inputs ? buildPrompt(inputs) : base;
 
-  const mask = form.get("mask");
   if (mask instanceof File && logo) {
     return NextResponse.json({ error: "Turn off the Logo chip to edit with a mask" }, { status: 400 });
   }
@@ -112,6 +148,8 @@ export async function POST(req: NextRequest) {
       model,
       image: files.length === 1 ? files[0] : files,
       ...(mask instanceof File ? { mask } : {}),
+      ...(markup ? { markup } : {}),
+      ...(gif ? gifParams(gif) : {}),
       prompt,
       size: size as OpenAI.ImageEditParams["size"],
       quality: quality as OpenAI.ImageEditParams["quality"],
@@ -161,6 +199,8 @@ export async function POST(req: NextRequest) {
       requestedSize: size,
       quality,
       complexity: complexityFields.complexity ?? null,
+      frameCount: gif?.frameCount ?? null,
+      frameDurationMs: gif?.frameDurationMs ?? null,
       format,
       background,
       // With only the brand logo as input, the user is generating, not editing an image.

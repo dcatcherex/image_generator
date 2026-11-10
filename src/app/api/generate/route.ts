@@ -1,6 +1,6 @@
 import { requireOwner } from "@/lib/require-owner";
 import { NextRequest } from "next/server";
-import { complexityParam, getOpenAI, DEFAULT_MODEL, normalizeCompression, supportsSvg, unsafeSvgReason, validateFormatBackground, validateSize } from "@/lib/openai";
+import { complexityParam, getOpenAI, DEFAULT_MODEL, normalizeCompression, supportsSvg, unsafeSvgReason, supportsGif, normalizeGif, gifParams, validateFormatBackground, validateSize } from "@/lib/openai";
 import { persistGeneratedImage, transparencyWarning } from "@/lib/save-image";
 import { buildPrompt, sanitizeBrandRequest, sanitizePromptInputs } from "@/lib/prompt-builder";
 import { resolveBrand } from "@/lib/brand-prompt";
@@ -33,6 +33,8 @@ export async function POST(req: NextRequest) {
     compression: rawCompression = null,
     compareGroupId: rawCompareGroupId = null,
     complexity = null,
+    frameCount = null,
+    frameDurationMs = null,
   } = body ?? {};
 
   // Structured inputs are authoritative; a plain `prompt` string stays supported and is
@@ -68,8 +70,15 @@ export async function POST(req: NextRequest) {
   if (isSvg && !supportsSvg(model)) {
     return new Response(JSON.stringify({ error: "SVG output needs a GPT Image 2.6 model" }), { status: 400 });
   }
-  // SVG takes no compression and no background (the author model decides what to draw).
-  const compression = isSvg ? null : normalizeCompression(format, rawCompression);
+  const isGif = format === "gif";
+  if (isGif && !supportsGif(model)) {
+    return new Response(JSON.stringify({ error: "GIF output needs a GPT Image 2.6 model" }), { status: 400 });
+  }
+  const gif = isGif ? normalizeGif(frameCount, frameDurationMs) : null;
+  const gifFields = gif ? gifParams(gif) : {};
+  // SVG takes no compression and no background (the author model decides what to draw);
+  // GIF takes no custom compression.
+  const compression = isSvg || isGif ? null : normalizeCompression(format, rawCompression);
   const backgroundFields = isSvg ? {} : { background };
   const storedBackground = isSvg ? "auto" : background;
   // Shared by the two images of a model comparison; anything that isn't a UUID is ignored.
@@ -77,8 +86,8 @@ export async function POST(req: NextRequest) {
     typeof rawCompareGroupId === "string" && UUID_RE.test(rawCompareGroupId) ? rawCompareGroupId : null;
 
   // OpenAI supports n up to 10, but we cap at 4 to match the UI's n selector.
-  // SVG output requires n=1.
-  const count = isSvg ? 1 : Math.min(Math.max(Number(n) || 1, 1), 4);
+  // SVG output requires n=1; GIF keeps n=1 to stay inside the per-request pixel budget.
+  const count = isSvg || isGif ? 1 : Math.min(Math.max(Number(n) || 1, 1), 4);
 
   // What is actually sent (empty for 2.5), so the stored value matches the request.
   const complexityFields = complexityParam(model, complexity);
@@ -94,8 +103,8 @@ export async function POST(req: NextRequest) {
     // the plain non-streaming call, emitting one "done" event per image as it's
     // persisted so the gallery fills in progressively. n === 1 keeps the original
     // live partial-preview streaming path unchanged.
-    // SVG doesn't stream, so it takes the plain call below even for one image.
-    if (count === 1 && !isSvg) {
+    // SVG and GIF don't stream, so they take the plain call below even for one image.
+    if (count === 1 && !isSvg && !isGif) {
       const partials = preview ? PREVIEW_PARTIALS : 0;
       const t0 = Date.now();
       const events = await openai.images.generate({
@@ -182,6 +191,7 @@ export async function POST(req: NextRequest) {
       ...(compression != null ? { output_compression: compression } : {}),
       ...backgroundFields,
       ...complexityFields,
+      ...gifFields,
       n: count,
       stream: false,
     });
@@ -212,6 +222,8 @@ export async function POST(req: NextRequest) {
         requestedSize: size,
         quality,
         complexity: complexityFields.complexity ?? null,
+        frameCount: gif?.frameCount ?? null,
+        frameDurationMs: gif?.frameDurationMs ?? null,
         format,
         background: storedBackground,
         sourceType: "generate",

@@ -12,6 +12,8 @@ export function rowToImageRecord(row: ImageRow): ImageRecord {
     size: row.size,
     quality: row.quality,
     complexity: row.complexity,
+    frameCount: row.frameCount,
+    frameDurationMs: row.frameDurationMs,
     format: row.format,
     background: row.background,
     blobUrl: row.blobUrl,

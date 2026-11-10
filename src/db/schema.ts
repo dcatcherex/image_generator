@@ -12,6 +12,9 @@ export const images = pgTable("images", {
   quality: text("quality").notNull(),
   // GPT Image 2.6 `complexity` (low | medium | high); null for models that don't take it.
   complexity: text("complexity"),
+  // Animated GIF output only (null otherwise): frames and per-frame delay that were requested.
+  frameCount: integer("frame_count"),
+  frameDurationMs: integer("frame_duration_ms"),
   format: text("format").notNull().default("png"),
   background: text("background").notNull().default("auto"),
   blobUrl: text("blob_url").notNull(),
