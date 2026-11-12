@@ -62,6 +62,18 @@ export function supportsSvg(model: string): boolean {
 }
 
 /**
+ * The `svg` request field: picks the model that authors the SVG. Accounts with SVG model
+ * selection enabled must send `svg.model` (the API answers 400 "SVG generation requires
+ * 'svg.model'" otherwise); accounts without it must omit the object. Override the author
+ * with OPENAI_SVG_MODEL, or set it to "none" to omit the field.
+ */
+export function svgParams(): { svg?: { model: string } } {
+  const model = (process.env.OPENAI_SVG_MODEL ?? "gpt-5.4-mini").trim();
+  if (!model || model.toLowerCase() === "none") return {};
+  return { svg: { model } };
+}
+
+/**
  * Animated GIF output (2.6 only): generations and edits, no streaming/partials/compression
  * and no mask. `size` is per frame; frames x frame size x n must fit the model's pixel
  * budget, so we keep n=1.

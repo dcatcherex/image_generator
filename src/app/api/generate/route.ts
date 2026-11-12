@@ -1,6 +1,6 @@
 import { requireOwner } from "@/lib/require-owner";
 import { NextRequest } from "next/server";
-import { complexityParam, getOpenAI, DEFAULT_MODEL, normalizeCompression, supportsSvg, unsafeSvgReason, supportsGif, normalizeGif, gifParams, validateFormatBackground, validateSize } from "@/lib/openai";
+import { complexityParam, getOpenAI, DEFAULT_MODEL, normalizeCompression, supportsSvg, svgParams, unsafeSvgReason, supportsGif, normalizeGif, gifParams, validateFormatBackground, validateSize } from "@/lib/openai";
 import { persistGeneratedImage, transparencyWarning } from "@/lib/save-image";
 import { buildPrompt, sanitizeBrandRequest, sanitizePromptInputs } from "@/lib/prompt-builder";
 import { resolveBrand } from "@/lib/brand-prompt";
@@ -192,6 +192,7 @@ export async function POST(req: NextRequest) {
       ...backgroundFields,
       ...complexityFields,
       ...gifFields,
+      ...(isSvg ? svgParams() : {}),
       n: count,
       stream: false,
     });

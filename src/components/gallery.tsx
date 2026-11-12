@@ -114,6 +114,13 @@ export function Gallery({
     return items;
   }, [pendingPreviews, batchPendingCount, filtered]);
 
+  // The first couple of rows are above the fold and one of them is the LCP element, so
+  // load those eagerly instead of next/image's default lazy loading.
+  const eagerIds = useMemo(
+    () => new Set(filtered.slice(0, columns * 2).map((img) => img.id)),
+    [filtered, columns]
+  );
+
   // Placeholders render as squares (their real size isn't known yet), so they get a
   // neutral 1:1 weight; real images use their stored size to estimate how tall they'll
   // render, so the shortest-column heuristic below reflects actual layout.
@@ -175,6 +182,7 @@ export function Gallery({
         onRefine={onRefine}
         onOpen={() => setLightboxIndex(filtered.findIndex((img) => img.id === item.image.id))}
         masonry={view === "masonry"}
+        eager={eagerIds.has(item.image.id)}
       />
     );
   }

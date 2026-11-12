@@ -5,6 +5,7 @@ import { Poppins, Inter, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import "@clerk/ui/themes/shadcn.css";
 import { ThemeProvider } from "@/components/theme-provider";
+import { ClerkFreshToken } from "@/components/clerk-fresh-token";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
 
@@ -39,6 +40,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body className="min-h-full flex flex-col bg-page text-foreground">
         <ClerkProvider appearance={{ theme: shadcn }}>
+          <ClerkFreshToken />
           <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
             <TooltipProvider>
               {children}

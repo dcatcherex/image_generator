@@ -37,6 +37,7 @@ export function ImageCard({
   onRefine,
   onOpen,
   masonry = false,
+  eager = false,
 }: {
   image: ImageRecord;
   onImageUpdated: (image: ImageRecord) => void;
@@ -45,7 +46,10 @@ export function ImageCard({
   onRefine: (image: ImageRecord) => void;
   onOpen?: () => void;
   masonry?: boolean;
+  // Above-the-fold cards load eagerly so the LCP image isn't lazy-loaded.
+  eager?: boolean;
 }) {
+  const loading = eager ? "eager" : "lazy";
   const readOnly = useReadOnly();
   const [deleting, setDeleting] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -101,6 +105,7 @@ export function ImageCard({
           width={parseSize(image.size)?.width ?? 1024}
           height={parseSize(image.size)?.height ?? 1024}
           sizes="(max-width: 768px) 50vw, 25vw"
+          loading={loading}
           className="block w-full h-auto cursor-pointer"
           onClick={onOpen}
         />
@@ -111,6 +116,7 @@ export function ImageCard({
             alt={image.prompt}
             fill
             sizes="(max-width: 768px) 50vw, 25vw"
+            loading={loading}
             className="object-cover"
           />
         </div>

@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { ImageIcon, Images, MessageSquare, Sparkles } from "lucide-react";
-import { UserButton } from "@clerk/nextjs";
+import { UserButton, useAuth } from "@clerk/nextjs";
 import { GeneratePanel } from "@/components/generate-panel";
 import { Gallery } from "@/components/gallery";
 import { CompareDialog } from "@/components/compare-dialog";
@@ -56,6 +57,20 @@ export function Home({ readOnly }: { readOnly: boolean }) {
   // Below `lg` the panel and the gallery can't share the screen, so they become two tabs
   // (both stay mounted, so the hidden one keeps its state, scroll position and any draft).
   const [mobileTab, setMobileTab] = useState<"gallery" | "create">("gallery");
+
+  // The server decides `readOnly` from the session cookie. If that cookie had expired (idle
+  // tab, throttled refresh timer) the page renders as a viewer even though Clerk still has a
+  // live session. Refresh the token and re-render the server component once to recover.
+  const { isLoaded: authLoaded, isSignedIn, getToken } = useAuth();
+  const router = useRouter();
+  const recoveryTried = useRef(false);
+  useEffect(() => {
+    if (!readOnly || !authLoaded || !isSignedIn || recoveryTried.current) return;
+    recoveryTried.current = true;
+    getToken({ skipCache: true })
+      .then(() => router.refresh())
+      .catch(() => {});
+  }, [readOnly, authLoaded, isSignedIn, getToken, router]);
 
   useEffect(() => {
     fetch("/api/images")
