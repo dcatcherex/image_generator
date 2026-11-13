@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ImageIcon, Images, MessageSquare, Sparkles } from "lucide-react";
 import { UserButton, useAuth } from "@clerk/nextjs";
@@ -114,58 +114,61 @@ export function Home({ readOnly }: { readOnly: boolean }) {
     setMobileTab("gallery");
   }
 
-  function handleImageCreated(image: ImageRecord) {
+  // The gallery is memoized (re-rendering every card on each prompt keystroke made typing lag),
+  // so everything handed to it must keep a stable identity across renders.
+  const handleImageCreated = useCallback((image: ImageRecord) => {
     setImages((prev) => [image, ...prev]);
-  }
+  }, []);
 
-  function handleDelete(image: ImageRecord) {
+  const handleDelete = useCallback((image: ImageRecord) => {
     setImages((prev) => prev.filter((i) => i.id !== image.id));
-  }
+  }, []);
 
-  function handleImageUpdated(image: ImageRecord) {
+  const handleImageUpdated = useCallback((image: ImageRecord) => {
     setImages((prev) => prev.map((i) => (i.id === image.id ? image : i)));
-  }
+  }, []);
 
-  async function handleUseAsReference(image: ImageRecord) {
+  const handleUseAsReference = useCallback(async (image: ImageRecord) => {
     const item = await referenceItemFromImage(image);
     setReferenceItems((prev) => [...prev, item]);
     setMobileTab("create");
-  }
+  }, []);
+
+  const { activeBrand, brands, setActive: setActiveBrand } = brandState;
 
   // Unlike "Use as reference" (which appends and sets no parent), Refine starts a fresh edit
   // of this one image: it replaces the references, carries the image's constraints forward
   // and remembers it as the parent so the versions chain can be rebuilt later.
-  async function handleRefine(image: ImageRecord) {
-    warnIfBrandDiffers(image);
-    const item = await referenceItemFromImage(image);
-    setReferenceItems([item]);
-    setChangeOnly(image.promptInputs?.changeOnly ?? "");
-    setPreserve(image.promptInputs?.preserve ?? []);
-    setParentImageId(image.id);
-    setPrompt("");
-    setMobileTab("create");
-    setTimeout(() => document.getElementById("prompt")?.focus(), 0);
-  }
+  const handleRefine = useCallback(
+    async (image: ImageRecord) => {
+      // Refining uses the active brand's current settings, never the image's snapshot (BRANDS.md
+      // decision 11). If that's a different brand, say so and offer to switch rather than switch
+      // silently; if it's the same brand but edited since, say the current version applies.
+      if (image.brandId && image.brandId !== activeBrand?.id) {
+        const brand = brands.find((b) => b.id === image.brandId);
+        if (brand) {
+          toast.warning(`This image was made for ${brand.name}, but ${activeBrand ? activeBrand.name : "no brand"} is active`, {
+            action: brand.archivedAt
+              ? undefined
+              : { label: `Use ${brand.name}`, onClick: () => setActiveBrand(brand.id) },
+          });
+        }
+      } else if (activeBrand && image.brandId === activeBrand.id && Date.parse(activeBrand.updatedAt) > Date.parse(image.createdAt)) {
+        toast.info(`${activeBrand.name} has changed since this image was made — refining uses its current settings`);
+      }
+      const item = await referenceItemFromImage(image);
+      setReferenceItems([item]);
+      setChangeOnly(image.promptInputs?.changeOnly ?? "");
+      setPreserve(image.promptInputs?.preserve ?? []);
+      setParentImageId(image.id);
+      setPrompt("");
+      setMobileTab("create");
+      setTimeout(() => document.getElementById("prompt")?.focus(), 0);
+    },
+    [activeBrand, brands, setActiveBrand]
+  );
 
-  // Refining uses the active brand's current settings, never the image's snapshot (BRANDS.md
-  // decision 11). If that's a different brand, say so and offer to switch rather than switch
-  // silently; if it's the same brand but edited since, say the current version applies.
-  function warnIfBrandDiffers(image: ImageRecord) {
-    const active = brandState.activeBrand;
-    if (image.brandId && image.brandId !== active?.id) {
-      const brand = brandState.brands.find((b) => b.id === image.brandId);
-      if (!brand) return;
-      toast.warning(`This image was made for ${brand.name}, but ${active ? active.name : "no brand"} is active`, {
-        action: brand.archivedAt
-          ? undefined
-          : { label: `Use ${brand.name}`, onClick: () => brandState.setActive(brand.id) },
-      });
-    } else if (active && image.brandId === active.id && Date.parse(active.updatedAt) > Date.parse(image.createdAt)) {
-      toast.info(`${active.name} has changed since this image was made — refining uses its current settings`);
-    }
-  }
-
-  function handleUseAsPrompt(image: ImageRecord) {
+  const handleUseAsPrompt = useCallback((image: ImageRecord) => {
     // Restore what the user typed, not the assembled text (older images have no inputs).
     const inputs = image.promptInputs;
     setPrompt(inputs?.base ?? image.prompt);
@@ -175,16 +178,28 @@ export function Home({ readOnly }: { readOnly: boolean }) {
     if (inputs?.changeOnly != null) setChangeOnly(inputs.changeOnly);
     if (inputs?.preserve) setPreserve(inputs.preserve);
     setMobileTab("create");
-  }
+  }, []);
 
   // One placeholder tile per image still expected from each active stream (the first tile of a
   // stream shows its live partial frame, if preview is on); an edit shows a single tile.
-  const pendingPreviews: Array<string | null> = [generateStream, compareStream].flatMap((s) =>
-    s.isGenerating
-      ? Array.from({ length: Math.max(s.pendingCount, 1) }, (_, i) => (i === 0 ? s.partialB64 : null))
-      : []
-  );
-  if (isEditing && pendingPreviews.length === 0) pendingPreviews.push(null);
+  const pendingPreviews = useMemo(() => {
+    const previews: Array<string | null> = [
+      [generateStream.isGenerating, generateStream.pendingCount, generateStream.partialB64] as const,
+      [compareStream.isGenerating, compareStream.pendingCount, compareStream.partialB64] as const,
+    ].flatMap(([isGenerating, pendingCount, partialB64]) =>
+      isGenerating ? Array.from({ length: Math.max(pendingCount, 1) }, (_, i) => (i === 0 ? partialB64 : null)) : []
+    );
+    if (isEditing && previews.length === 0) previews.push(null);
+    return previews;
+  }, [
+    generateStream.isGenerating,
+    generateStream.pendingCount,
+    generateStream.partialB64,
+    compareStream.isGenerating,
+    compareStream.pendingCount,
+    compareStream.partialB64,
+    isEditing,
+  ]);
 
   // When a generation starts, move a phone/tablet user to the gallery where its placeholder
   // tile is. State is adjusted during render on the idle -> busy transition, not in an effect.

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { Clock, Heart, Loader2, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -45,7 +45,9 @@ function useMaxColumns() {
   return { ref: setEl, maxColumns };
 }
 
-export function Gallery({
+// Memoized: it lives beside the prompt box, whose state sits in Home, so without this every
+// keystroke re-rendered every image card.
+export const Gallery = memo(function Gallery({
   images,
   onDelete,
   onImageUpdated,
@@ -294,4 +296,4 @@ export function Gallery({
       )}
     </div>
   );
-}
+});
