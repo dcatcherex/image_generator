@@ -238,6 +238,7 @@ export function Home({ readOnly }: { readOnly: boolean }) {
           setColumns={galleryView.setColumns}
           panelVisibility={panelOptions.visibility}
           setPanelOptionVisible={panelOptions.setOptionVisible}
+          resetPanelVisibility={panelOptions.resetVisibility}
           defaultModel={panelOptions.defaultModel}
           setDefaultModel={panelOptions.setDefaultModel}
         />

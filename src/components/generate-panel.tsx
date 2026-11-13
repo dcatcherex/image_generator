@@ -679,7 +679,21 @@ export function GeneratePanel({
             </div>
           )}
           <div className="flex items-center justify-between">
-            <Label htmlFor="prompt">Prompt</Label>
+            <div className="flex items-center gap-1.5">
+              <Label htmlFor="prompt">Prompt</Label>
+              {placeholderCount > 0 && (
+                <mark
+                  id="prompt-placeholders"
+                  title={`${placeholderCount} placeholder${placeholderCount > 1 ? "s" : ""} to fill in · Tab jumps to the next`}
+                  className="rounded-sm bg-amber-300/50 px-1 text-xs tabular-nums text-inherit dark:bg-amber-400/25"
+                >
+                  {placeholderCount}
+                  <span className="sr-only">
+                    {" "}placeholder{placeholderCount > 1 ? "s" : ""} to fill in, Tab jumps to the next
+                  </span>
+                </mark>
+              )}
+            </div>
             <div className="flex items-center gap-2">
               {isEditMode && (
                 <span className="flex items-center gap-1 text-xs text-muted-foreground">
@@ -722,15 +736,6 @@ export function GeneratePanel({
             }
             className="field-sizing-content min-h-36 max-h-[55vh] resize-none overflow-y-auto"
           />
-          {placeholderCount > 0 && (
-            <p id="prompt-placeholders" className="text-xs text-muted-foreground">
-              <mark className="rounded-sm bg-amber-300/50 px-0.5 text-inherit dark:bg-amber-400/25">
-                {placeholderCount} placeholder{placeholderCount > 1 ? "s" : ""}
-              </mark>{" "}
-              to fill in ·{" "}
-              <kbd className="rounded border px-1 font-mono text-[10px]">Tab</kbd> jumps to the next
-            </p>
-          )}
           <Dialog open={promptExpanded} onOpenChange={setPromptExpanded}>
             <DialogContent className="flex max-h-[90vh] flex-col sm:max-w-3xl">
               <DialogTitle>Prompt</DialogTitle>
@@ -1086,7 +1091,15 @@ export function GeneratePanel({
             </div>
           )}
           {visibility.size && <div className="flex flex-col gap-1.5">
-            <Label>Size</Label>
+            <div className="flex items-baseline justify-between gap-2">
+              <Label>Size</Label>
+              {/* Pixel hint beside the title; Auto lets the model choose, so nothing to show. */}
+              {size !== "auto" && (
+                <span className="text-[11px] tabular-nums text-muted-foreground">
+                  {size.replace("x", "×")}
+                </span>
+              )}
+            </div>
             <Select value={aspectRatio} onValueChange={(v) => v && setAspectRatio(v)}>
               <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -1114,10 +1127,6 @@ export function GeneratePanel({
                 </SelectItem>
               </SelectContent>
             </Select>
-            {/* Always-visible pixel hint under the field; Auto lets the model choose. */}
-            <p className="text-xs tabular-nums text-muted-foreground">
-              {size === "auto" ? "Model picks the size" : `${size.replace("x", " × ")} px`}
-            </p>
           </div>}
           {visibility.tier && <div className="flex flex-col gap-1.5">
             <Label>Size tier</Label>

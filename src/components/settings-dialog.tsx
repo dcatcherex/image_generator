@@ -44,6 +44,7 @@ export function SettingsDialog({
   setColumns,
   panelVisibility,
   setPanelOptionVisible,
+  resetPanelVisibility,
   defaultModel,
   setDefaultModel,
 }: {
@@ -53,6 +54,7 @@ export function SettingsDialog({
   setColumns: (n: number) => void;
   panelVisibility: PanelOptionVisibility;
   setPanelOptionVisible: (id: PanelOptionId, visible: boolean) => void;
+  resetPanelVisibility: () => void;
   defaultModel: string;
   setDefaultModel: (model: string) => void;
 }) {
@@ -158,7 +160,12 @@ export function SettingsDialog({
 
             <div className="my-5 border-t" />
 
-            <h3 className="mb-1 text-sm font-semibold">Generate panel</h3>
+            <div className="mb-1 flex items-center justify-between gap-4">
+              <h3 className="text-sm font-semibold">Generate panel</h3>
+              <Button type="button" variant="ghost" size="sm" className="h-7 text-xs" onClick={resetPanelVisibility}>
+                Reset
+              </Button>
+            </div>
             <p className="mb-4 text-xs text-muted-foreground">
               Hidden options keep their current value.
             </p>

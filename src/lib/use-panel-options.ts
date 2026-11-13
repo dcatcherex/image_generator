@@ -3,23 +3,24 @@
 import { useEffect, useState } from "react";
 import { DEFAULT_MODEL, MODEL } from "@/lib/openai";
 
+// `defaultVisible` is whether the option is shown before the user changes it in Settings.
 export const PANEL_OPTIONS = [
-  { id: "presets", label: "Presets" },
-  { id: "exactText", label: "Exact text" },
-  { id: "economy", label: "Economy mode" },
-  { id: "preview", label: "Live preview" },
-  { id: "batch", label: "Batch (n)" },
-  { id: "size", label: "Size" },
-  { id: "tier", label: "Size tier" },
-  { id: "quality", label: "Quality" },
-  { id: "complexity", label: "Complexity (GPT Image 2.6)" },
-  { id: "format", label: "Format" },
-  { id: "compression", label: "Compression" },
-  { id: "background", label: "Background" },
-  { id: "tag", label: "Tag" },
-  { id: "model", label: "Model" },
-  { id: "preserve", label: "Change only / Preserve" },
-  { id: "compare", label: "Compare models" },
+  { id: "presets", label: "Presets", defaultVisible: true },
+  { id: "exactText", label: "Exact text", defaultVisible: false },
+  { id: "economy", label: "Economy mode", defaultVisible: false },
+  { id: "preview", label: "Live preview", defaultVisible: false },
+  { id: "batch", label: "Batch (n)", defaultVisible: false },
+  { id: "size", label: "Size", defaultVisible: true },
+  { id: "tier", label: "Size tier", defaultVisible: true },
+  { id: "quality", label: "Quality", defaultVisible: true },
+  { id: "complexity", label: "Complexity (GPT Image 2.6)", defaultVisible: true },
+  { id: "format", label: "Format", defaultVisible: true },
+  { id: "compression", label: "Compression", defaultVisible: false },
+  { id: "background", label: "Background", defaultVisible: true },
+  { id: "tag", label: "Tag", defaultVisible: false },
+  { id: "model", label: "Model", defaultVisible: false },
+  { id: "preserve", label: "Change only / Preserve", defaultVisible: true },
+  { id: "compare", label: "Compare models", defaultVisible: false },
 ] as const;
 
 export type PanelOptionId = (typeof PANEL_OPTIONS)[number]["id"];
@@ -33,7 +34,7 @@ function isKnownModel(value: unknown): value is string {
 }
 
 const DEFAULT_VISIBILITY = Object.fromEntries(
-  PANEL_OPTIONS.map((o) => [o.id, true])
+  PANEL_OPTIONS.map((o) => [o.id, o.defaultVisible])
 ) as PanelOptionVisibility;
 
 // Which generate-panel options are shown. Hidden options keep using their current/default
@@ -74,5 +75,12 @@ export function usePanelOptions() {
     });
   }
 
-  return { visibility, setOptionVisible, defaultModel, setDefaultModel };
+  function resetVisibility() {
+    setVisibility(DEFAULT_VISIBILITY);
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch {}
+  }
+
+  return { visibility, setOptionVisible, resetVisibility, defaultModel, setDefaultModel };
 }
