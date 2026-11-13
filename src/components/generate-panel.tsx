@@ -764,7 +764,11 @@ export function GeneratePanel({
             setPrompt={setPrompt}
             placeholderCount={placeholderCount}
             isEdit={isEditMode}
-            referenceCount={referenceItems.length}
+            references={referenceItems.map((item, i) => ({
+              role: item.role ?? defaultReferenceRole(i),
+              ...(item.note?.trim() ? { note: item.note.trim() } : {}),
+            }))}
+            hasMarkup={Boolean(activeMarkup)}
             language={activeBrand?.language ?? null}
           />
           <Dialog open={promptExpanded} onOpenChange={setPromptExpanded}>

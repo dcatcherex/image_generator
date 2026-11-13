@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireOwner } from "@/lib/require-owner";
 import { getOpenAI } from "@/lib/openai";
+import { sanitizePromptInputs } from "@/lib/prompt-builder";
 import {
   ASSIST_MODES,
   assistInput,
@@ -40,7 +41,9 @@ export async function POST(req: NextRequest) {
     context,
     isEdit: Boolean(body?.isEdit),
     language: typeof body?.language === "string" && body.language.trim() ? body.language.trim() : null,
-    referenceCount: Math.max(0, Math.min(16, Number(body?.referenceCount) || 0)),
+    // Reuse the generate routes' validation of role/note entries.
+    references: (sanitizePromptInputs({ base: "-", referenceRoles: body?.references })?.referenceRoles ?? []).slice(0, 16),
+    hasMarkup: Boolean(body?.hasMarkup),
   };
 
   try {

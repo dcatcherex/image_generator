@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { ASSIST_MODE_LABELS, CONTEXT_CHIPS, type AssistMode } from "@/lib/prompt-assist";
+import type { ReferenceRoleEntry } from "@/lib/prompt-builder";
 
 /**
  * "AI assist" for the prompt box: fills <placeholders>, rewrites the prompt with the GPT Image
@@ -21,7 +22,8 @@ export function PromptAssistDialog({
   setPrompt,
   placeholderCount,
   isEdit,
-  referenceCount,
+  references,
+  hasMarkup,
   language,
 }: {
   open: boolean;
@@ -30,7 +32,8 @@ export function PromptAssistDialog({
   setPrompt: (prompt: string) => void;
   placeholderCount: number;
   isEdit: boolean;
-  referenceCount: number;
+  references: ReferenceRoleEntry[];
+  hasMarkup: boolean;
   language: string | null;
 }) {
   // Kept across openings so the same context can be reused on the next sheet / prompt.
@@ -53,7 +56,7 @@ export function PromptAssistDialog({
       const res = await fetch("/api/prompt-assist", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode, prompt, context, isEdit, referenceCount, language }),
+        body: JSON.stringify({ mode, prompt, context, isEdit, references, hasMarkup, language }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || typeof data.prompt !== "string") {
@@ -128,6 +131,11 @@ export function PromptAssistDialog({
               </button>
             ))}
           </div>
+          {references.length > 1 && (
+            <p className="text-xs text-muted-foreground">
+              Knows your {references.length} reference images by number and uses their roles and notes — set those below the prompt for better results.
+            </p>
+          )}
           {language && (
             <p className="text-xs text-muted-foreground">Brand language: {language} (used for captions and in-image text)</p>
           )}
