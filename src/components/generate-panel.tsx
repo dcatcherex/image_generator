@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { ChevronDown, Loader2, Maximize, Maximize2, Paintbrush2, PenLine, Plus, Sparkles, X } from "lucide-react";
+import { ChevronDown, Loader2, Maximize, Maximize2, Paintbrush2, PenLine, Plus, Sparkles, WandSparkles, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -67,6 +67,7 @@ import { PROMPT_PRESETS, presetScaffold, type PromptPreset } from "@/lib/prompt-
 import { BrandChips } from "@/components/brand-chips";
 import { adjacentPlaceholder, findPlaceholders } from "@/lib/placeholders";
 import { PromptTextarea } from "@/components/prompt-textarea";
+import { PromptAssistDialog } from "@/components/prompt-assist-dialog";
 import { useCostStats } from "@/lib/use-cost-stats";
 import { useLivePreview } from "@/lib/use-live-preview";
 import { ASSIGNABLE_TAGS } from "@/lib/tags";
@@ -220,6 +221,7 @@ export function GeneratePanel({
   const [exactTextOpen, setExactTextOpen] = useState(false);
   const [preserveOpen, setPreserveOpen] = useState(false);
   const [promptExpanded, setPromptExpanded] = useState(false);
+  const [assistOpen, setAssistOpen] = useState(false);
   const promptRef = useRef<HTMLTextAreaElement>(null);
   // Which action is waiting on the "unfilled placeholders" confirmation, if any.
   const [placeholderWarn, setPlaceholderWarn] = useState<"submit" | "queue" | null>(null);
@@ -709,6 +711,25 @@ export function GeneratePanel({
                       variant="ghost"
                       size="icon-sm"
                       className="size-6 text-muted-foreground"
+                      aria-label="AI prompt assist"
+                      onClick={() => setAssistOpen(true)}
+                    />
+                  }
+                >
+                  <WandSparkles className="size-3.5" />
+                </TooltipTrigger>
+                <TooltipContent>
+                  AI assist: fill placeholders, apply best practices or context
+                </TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      className="size-6 text-muted-foreground"
                       aria-label="Expand prompt editor"
                       onClick={() => setPromptExpanded(true)}
                     />
@@ -735,6 +756,16 @@ export function GeneratePanel({
                 : "A children's book illustration of a fox reading under a lantern..."
             }
             className="field-sizing-content min-h-36 max-h-[55vh] resize-none overflow-y-auto"
+          />
+          <PromptAssistDialog
+            open={assistOpen}
+            onOpenChange={setAssistOpen}
+            prompt={prompt}
+            setPrompt={setPrompt}
+            placeholderCount={placeholderCount}
+            isEdit={isEditMode}
+            referenceCount={referenceItems.length}
+            language={activeBrand?.language ?? null}
           />
           <Dialog open={promptExpanded} onOpenChange={setPromptExpanded}>
             <DialogContent className="flex max-h-[90vh] flex-col sm:max-w-3xl">
