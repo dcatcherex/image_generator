@@ -98,7 +98,7 @@ const SECTIONS: Array<{ id: string; label: string; icon: typeof BookOpen; body: 
       <>
         <H>Presets</H>
         <P>
-          <K>Presets…</K> above the prompt fills in a ready-made template with labelled sections (Scene, Subject, Style, Constraints) and sets suitable options. Replace every <K>&lt;placeholder&gt;</K> before generating. If the prompt already has text, you&apos;re asked before it&apos;s replaced.
+          <K>Presets…</K> above the prompt fills in a ready-made template with labelled sections (Scene, Subject, Style, Constraints) and sets suitable options. Replace every <K>&lt;placeholder&gt;</K> before generating (text in <K>[square brackets]</K> counts too, and both are highlighted): in the prompt, <K>Tab</K> selects the next one (<K>Shift+Tab</K> the previous) so you can type straight over it, and you&apos;re warned if any are left when you generate. If the prompt already has text, you&apos;re asked before it&apos;s replaced.
         </P>
         <P>
           For new images: {PROMPT_PRESETS.filter((p) => p.mode === "generate").map((p) => p.label).join(", ")}. With reference images loaded, the list switches to edit presets: {PROMPT_PRESETS.filter((p) => p.mode === "edit").map((p) => p.label).join(", ")}.

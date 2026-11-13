@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { ChevronDown, Loader2, Maximize, Paintbrush2, PenLine, Plus, Sparkles, X } from "lucide-react";
+import { useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { ChevronDown, Loader2, Maximize, Maximize2, Paintbrush2, PenLine, Plus, Sparkles, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -24,6 +24,7 @@ import { MaskEditor } from "@/components/mask-editor";
 import { MarkupEditor } from "@/components/markup-editor";
 import { ReferenceImagesPicker } from "@/components/reference-images-picker";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Dialog, DialogClose, DialogContent, DialogFooter, DialogTitle } from "@/components/ui/dialog";
 import {
   ASPECT_RATIOS,
   CUSTOM_SIZE,
@@ -64,6 +65,8 @@ import {
 } from "@/lib/prompt-builder";
 import { PROMPT_PRESETS, presetScaffold, type PromptPreset } from "@/lib/prompt-presets";
 import { BrandChips } from "@/components/brand-chips";
+import { adjacentPlaceholder, findPlaceholders } from "@/lib/placeholders";
+import { PromptTextarea } from "@/components/prompt-textarea";
 import { useCostStats } from "@/lib/use-cost-stats";
 import { useLivePreview } from "@/lib/use-live-preview";
 import { ASSIGNABLE_TAGS } from "@/lib/tags";
@@ -215,6 +218,32 @@ export function GeneratePanel({
   const [markupEditorOpen, setMarkupEditorOpen] = useState(false);
   // A preset waiting on the user's OK because it would overwrite a non-empty prompt.
   const [exactTextOpen, setExactTextOpen] = useState(false);
+  const [preserveOpen, setPreserveOpen] = useState(false);
+  const [promptExpanded, setPromptExpanded] = useState(false);
+  const promptRef = useRef<HTMLTextAreaElement>(null);
+  // Which action is waiting on the "unfilled placeholders" confirmation, if any.
+  const [placeholderWarn, setPlaceholderWarn] = useState<"submit" | "queue" | null>(null);
+  const placeholderCount = useMemo(() => findPlaceholders(prompt).length, [prompt]);
+
+  // Tab / Shift+Tab select the next / previous <placeholder> so it can be typed over. With
+  // none left, Tab keeps its normal job of moving focus.
+  function handlePromptKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key !== "Tab" || e.ctrlKey || e.altKey || e.metaKey) return;
+    const el = e.currentTarget;
+    const next = adjacentPlaceholder(el.value, el.selectionStart, el.selectionEnd, e.shiftKey);
+    if (!next) return;
+    e.preventDefault();
+    el.setSelectionRange(next.start, next.end);
+  }
+
+  function selectFirstPlaceholder() {
+    setPlaceholderWarn(null);
+    const el = promptRef.current;
+    const first = findPlaceholders(prompt)[0];
+    if (!el || !first) return;
+    el.focus();
+    el.setSelectionRange(first.start, first.end);
+  }
   const [pendingPreset, setPendingPreset] = useState<PromptPreset | null>(null);
 
   const { generate, isGenerating } = generateStream;
@@ -416,7 +445,7 @@ export function GeneratePanel({
     setPreserve(preserve.includes(id) ? preserve.filter((p) => p !== id) : [...preserve, id]);
   }
 
-  function handleAddToQueue() {
+  function handleAddToQueue(force = false) {
     if (!prompt.trim()) {
       toast.error("Enter a prompt first");
       return;
@@ -425,6 +454,11 @@ export function GeneratePanel({
       toast.error(sizeError);
       return;
     }
+    if (!force && placeholderCount > 0) {
+      setPlaceholderWarn("queue");
+      return;
+    }
+    setPlaceholderWarn(null);
     const tagValue = tag === NO_TAG ? null : tag;
     setQueue((q) => [
       ...q,
@@ -438,12 +472,18 @@ export function GeneratePanel({
     setQueue((q) => q.filter((item) => item.id !== id));
   }
 
-  async function handleSubmit() {
+  async function handleSubmit(force = false) {
     const tagValue = tag === NO_TAG ? null : tag;
     if (sizeError) {
       toast.error(sizeError);
       return;
     }
+    // Only the draft is checked; queued prompts were checked when they were added.
+    if (!force && placeholderCount > 0) {
+      setPlaceholderWarn("submit");
+      return;
+    }
+    setPlaceholderWarn(null);
 
     if (!isEditMode && economyMode) {
       // The current draft (if any) is submitted alongside whatever's already queued,
@@ -598,7 +638,7 @@ export function GeneratePanel({
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
       <div className="flex flex-1 flex-col gap-4 p-4">
-        <div className="flex flex-1 min-h-48 flex-col gap-1.5">
+        <div className="flex flex-col gap-1.5">
           {visibility.presets && (
             <div className="flex flex-col gap-1.5">
               {/* Always controlled to "no selection" so the same preset can be picked twice. */}
@@ -640,24 +680,76 @@ export function GeneratePanel({
           )}
           <div className="flex items-center justify-between">
             <Label htmlFor="prompt">Prompt</Label>
-            {isEditMode && (
-              <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                <Paintbrush2 className="size-3" /> Editing {referenceItems.length} image
-                {referenceItems.length > 1 ? "s" : ""}
-              </span>
-            )}
+            <div className="flex items-center gap-2">
+              {isEditMode && (
+                <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <Paintbrush2 className="size-3" /> Editing {referenceItems.length} image
+                  {referenceItems.length > 1 ? "s" : ""}
+                </span>
+              )}
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      className="size-6 text-muted-foreground"
+                      aria-label="Expand prompt editor"
+                      onClick={() => setPromptExpanded(true)}
+                    />
+                  }
+                >
+                  <Maximize2 className="size-3.5" />
+                </TooltipTrigger>
+                <TooltipContent>Expand editor</TooltipContent>
+              </Tooltip>
+            </div>
           </div>
-          <Textarea
+          {/* Grows with its content up to ~half the screen; past that the panel scrolls, so
+              the controls below never squeeze the prompt. */}
+          <PromptTextarea
+            ref={promptRef}
             id="prompt"
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
+            onKeyDown={handlePromptKeyDown}
+            aria-describedby={placeholderCount > 0 ? "prompt-placeholders" : undefined}
             placeholder={
               isEditMode
                 ? "Describe how to change the reference image(s)..."
                 : "A children's book illustration of a fox reading under a lantern..."
             }
-            className="field-sizing-fixed h-full min-h-28 flex-1 resize-none overflow-y-auto"
+            className="field-sizing-content min-h-36 max-h-[55vh] resize-none overflow-y-auto"
           />
+          {placeholderCount > 0 && (
+            <p id="prompt-placeholders" className="text-xs text-muted-foreground">
+              <mark className="rounded-sm bg-amber-300/50 px-0.5 text-inherit dark:bg-amber-400/25">
+                {placeholderCount} placeholder{placeholderCount > 1 ? "s" : ""}
+              </mark>{" "}
+              to fill in ·{" "}
+              <kbd className="rounded border px-1 font-mono text-[10px]">Tab</kbd> jumps to the next
+            </p>
+          )}
+          <Dialog open={promptExpanded} onOpenChange={setPromptExpanded}>
+            <DialogContent className="flex max-h-[90vh] flex-col sm:max-w-3xl">
+              <DialogTitle>Prompt</DialogTitle>
+              <PromptTextarea
+                autoFocus
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                onKeyDown={handlePromptKeyDown}
+                aria-label="Prompt"
+                className="field-sizing-fixed h-[65vh] resize-none overflow-y-auto"
+              />
+              <DialogFooter className="items-center sm:justify-between">
+                <span className="text-xs text-muted-foreground">
+                  {prompt.trim() ? prompt.trim().split(/\s+/).length : 0} words
+                </span>
+                <DialogClose render={<Button size="sm" />}>Done</DialogClose>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
           {visibility.exactText && (
             <div className="flex shrink-0 flex-col gap-1.5">
               {/* Stays open while it has content, so a restored value is never hidden. */}
@@ -705,6 +797,26 @@ export function GeneratePanel({
           )}
           {isEditMode && visibility.preserve && (
             <div className="flex flex-col gap-2">
+              {/* Folded by default; the header summarizes the settings, and it stays open while
+                  Change only has text so a restored value is never hidden. */}
+              <button
+                type="button"
+                aria-expanded={preserveOpen || changeOnly.length > 0}
+                onClick={() => setPreserveOpen((v) => !v)}
+                className="flex min-w-0 items-center gap-1 self-start text-left text-xs text-muted-foreground hover:text-foreground"
+              >
+                <ChevronDown
+                  className={`size-3 shrink-0 transition-transform ${preserveOpen || changeOnly ? "" : "-rotate-90"}`}
+                />
+                <span className="shrink-0">Change only / Preserve</span>
+                {!(preserveOpen || changeOnly) && preserve.length > 0 && (
+                  <span className="truncate">
+                    · {PRESERVE_OPTIONS.filter((o) => preserve.includes(o.id)).map((o) => o.label).join(", ")}
+                  </span>
+                )}
+              </button>
+              {(preserveOpen || changeOnly.length > 0) && (
+              <>
               <Input
                 value={changeOnly}
                 onChange={(e) => setChangeOnly(e.target.value)}
@@ -733,6 +845,8 @@ export function GeneratePanel({
                   );
                 })}
               </div>
+              </>
+              )}
             </div>
           )}
           {reskinOn && activeBrand && (
@@ -925,7 +1039,7 @@ export function GeneratePanel({
                 variant="outline"
                 size="sm"
                 className="h-7 gap-1 text-xs"
-                onClick={handleAddToQueue}
+                onClick={() => handleAddToQueue()}
               >
                 <Plus className="size-3" /> Add to queue
               </Button>
@@ -1207,7 +1321,29 @@ export function GeneratePanel({
       </div>
 
       <div className="shrink-0 border-t bg-background p-4 py-3">
-        <Button onClick={handleSubmit} disabled={busy} className="h-10 w-full justify-between gap-2 lg:h-9">
+        {placeholderWarn && placeholderCount > 0 && (
+          <div
+            role="alert"
+            className="mb-2 flex flex-wrap items-center gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-2.5 py-1.5 text-xs"
+          >
+            <span className="flex-1">
+              {placeholderCount} placeholder{placeholderCount > 1 ? "s" : ""} not filled in. They&apos;ll be sent as
+              written.
+            </span>
+            <Button size="sm" className="h-6 px-2 text-xs" onClick={selectFirstPlaceholder}>
+              Fill in
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-6 px-2 text-xs"
+              onClick={() => (placeholderWarn === "queue" ? handleAddToQueue(true) : handleSubmit(true))}
+            >
+              {placeholderWarn === "queue" ? "Queue anyway" : "Send anyway"}
+            </Button>
+          </div>
+        )}
+        <Button onClick={() => handleSubmit()} disabled={busy} className="h-10 w-full justify-between gap-2 lg:h-9">
           <span className="flex items-center gap-2">
             {busy ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
             {isEditMode
