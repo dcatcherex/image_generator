@@ -180,6 +180,7 @@ export const Gallery = memo(function Gallery({
         image={item.image}
         onDelete={onDelete}
         onImageUpdated={onImageUpdated}
+        onUseAsPrompt={onUseAsPrompt}
         onUseAsReference={onUseAsReference}
         onRefine={onRefine}
         onOpen={() => setLightboxIndex(filtered.findIndex((img) => img.id === item.image.id))}

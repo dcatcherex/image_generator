@@ -18,6 +18,7 @@ import { ASSIGNABLE_TAGS } from "@/lib/tags";
 import { getVersionChain } from "@/lib/version-chain";
 import { useReadOnly } from "@/lib/read-only";
 import { ImageBrandBadge, SetBrandSelect } from "@/components/image-brand";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { ImageRecord } from "@/lib/types";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 
@@ -157,15 +158,21 @@ export function ImageLightbox({
           {!readOnly && (
           <>
           <Select value={image.tag ?? NO_TAG} onValueChange={(v) => v && handleTagChange(v)}>
-            <SelectTrigger
-              size="sm"
-              className="h-8 w-8 justify-center rounded-full border-none bg-secondary/80 p-0 hover:bg-secondary [&>svg]:hidden hover:cursor-pointer"
-              title="Set tag"
-            >
-              <span className="flex items-center justify-center">
-                <TagIcon className="size-4" />
-              </span>
-            </SelectTrigger>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <SelectTrigger
+                    size="sm"
+                    className="h-8 w-8 justify-center rounded-full border-none bg-secondary/80 p-0 hover:bg-secondary [&>svg]:hidden hover:cursor-pointer"
+                  >
+                    <span className="flex items-center justify-center">
+                      <TagIcon className="size-4" />
+                    </span>
+                  </SelectTrigger>
+                }
+              />
+              <TooltipContent>Set tag</TooltipContent>
+            </Tooltip>
             <SelectContent>
               <SelectItem value={NO_TAG}>No tag</SelectItem>
               {ASSIGNABLE_TAGS.map((t) => (
@@ -179,47 +186,75 @@ export function ImageLightbox({
             triggerClassName="h-8 w-8 justify-center rounded-full border-none bg-secondary/80 p-0 hover:bg-secondary [&>svg]:hidden hover:cursor-pointer"
             iconClassName="size-4"
           />
-          <Button
-            size="icon"
-            variant="secondary"
-            onClick={handleFavorite}
-            aria-label="Favorite"
-            className="rounded-full bg-secondary/80 hover:bg-secondary"
-          >
-            <Heart className={image.favorite ? "size-4 fill-red-500 text-red-500" : "size-4"} />
-          </Button>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  size="icon"
+                  variant="secondary"
+                  onClick={handleFavorite}
+                  aria-label="Favorite"
+                  className="rounded-full bg-secondary/80 hover:bg-secondary"
+                >
+                  <Heart className={image.favorite ? "size-4 fill-red-500 text-red-500" : "size-4"} />
+                </Button>
+              }
+            />
+            <TooltipContent>Favorite</TooltipContent>
+          </Tooltip>
           </>
           )}
-          <Button
-            size="icon"
-            variant="secondary"
-            aria-label="Download"
-            className="rounded-full bg-secondary/80 hover:bg-secondary"
-            nativeButton={false}
-            render={<a href={image.blobUrl} download target="_blank" rel="noreferrer" />}
-          >
-            <Download className="size-4" />
-          </Button>
-          <Button
-            size="icon"
-            variant="secondary"
-            onClick={onClose}
-            aria-label="Close"
-            className="rounded-full bg-secondary/80 hover:bg-secondary"
-          >
-            <X className="size-4" />
-          </Button>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  size="icon"
+                  variant="secondary"
+                  aria-label="Download"
+                  className="rounded-full bg-secondary/80 hover:bg-secondary"
+                  nativeButton={false}
+                  render={<a href={image.blobUrl} download target="_blank" rel="noreferrer" />}
+                >
+                  <Download className="size-4" />
+                </Button>
+              }
+            />
+            <TooltipContent>Download</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  size="icon"
+                  variant="secondary"
+                  onClick={onClose}
+                  aria-label="Close"
+                  className="rounded-full bg-secondary/80 hover:bg-secondary"
+                >
+                  <X className="size-4" />
+                </Button>
+              }
+            />
+            <TooltipContent>Close</TooltipContent>
+          </Tooltip>
         </div>
         {index > 0 && (
-          <Button
-            size="icon"
-            variant="secondary"
-            onClick={() => onIndexChange(index - 1)}
-            aria-label="Previous image"
-            className="absolute left-2 top-1/2 z-10 -translate-y-1/2 rounded-full bg-secondary/80 hover:bg-secondary"
-          >
-            <ChevronLeft className="size-4" />
-          </Button>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  size="icon"
+                  variant="secondary"
+                  onClick={() => onIndexChange(index - 1)}
+                  aria-label="Previous image"
+                  className="absolute left-2 top-1/2 z-10 -translate-y-1/2 rounded-full bg-secondary/80 hover:bg-secondary"
+                >
+                  <ChevronLeft className="size-4" />
+                </Button>
+              }
+            />
+            <TooltipContent>Previous image</TooltipContent>
+          </Tooltip>
         )}
         <Image
           src={image.blobUrl}
@@ -231,15 +266,22 @@ export function ImageLightbox({
           unoptimized
         />
         {index < images.length - 1 && (
-          <Button
-            size="icon"
-            variant="secondary"
-            onClick={() => onIndexChange(index + 1)}
-            aria-label="Next image"
-            className="absolute right-2 top-1/2 z-10 -translate-y-1/2 rounded-full bg-secondary/80 hover:bg-secondary"
-          >
-            <ChevronRight className="size-4" />
-          </Button>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  size="icon"
+                  variant="secondary"
+                  onClick={() => onIndexChange(index + 1)}
+                  aria-label="Next image"
+                  className="absolute right-2 top-1/2 z-10 -translate-y-1/2 rounded-full bg-secondary/80 hover:bg-secondary"
+                >
+                  <ChevronRight className="size-4" />
+                </Button>
+              }
+            />
+            <TooltipContent>Next image</TooltipContent>
+          </Tooltip>
         )}
       </div>
 
@@ -319,24 +361,53 @@ export function ImageLightbox({
       </ScrollArea>
       {!readOnly && (
       <div className="flex shrink-0 gap-1.5 border-t p-4">
-        <Button size="icon" variant="secondary" className="size-8" onClick={handleUseAsPromptClick} aria-label="Use as prompt">
-          <Type className="size-4" />
-        </Button>
-        <Button size="icon" variant="secondary" className="size-8" onClick={handleUseAsReferenceClick} aria-label="Use as reference">
-          <Layers className="size-4" />
-        </Button>
-        <Button size="icon" variant="secondary" className="size-8" onClick={handleRefineClick} aria-label="Refine">
-          <Wand2 className="size-4" />
-        </Button>
-        <Button
-          size="icon"
-          variant="secondary"
-          className="size-8 ml-auto"
-          onClick={() => setConfirmingDelete(true)}
-          disabled={deleting}
-        >
-          {deleting ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
-        </Button>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button size="icon" variant="secondary" className="size-8" onClick={handleUseAsPromptClick} aria-label="Use as prompt">
+                <Type className="size-4" />
+              </Button>
+            }
+          />
+          <TooltipContent>Use as prompt</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button size="icon" variant="secondary" className="size-8" onClick={handleUseAsReferenceClick} aria-label="Use as reference">
+                <Layers className="size-4" />
+              </Button>
+            }
+          />
+          <TooltipContent>Use as reference</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button size="icon" variant="secondary" className="size-8" onClick={handleRefineClick} aria-label="Refine">
+                <Wand2 className="size-4" />
+              </Button>
+            }
+          />
+          <TooltipContent>Refine</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                size="icon"
+                variant="secondary"
+                className="size-8 ml-auto"
+                onClick={() => setConfirmingDelete(true)}
+                disabled={deleting}
+                aria-label="Delete"
+              >
+                {deleting ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
+              </Button>
+            }
+          />
+          <TooltipContent>Delete</TooltipContent>
+        </Tooltip>
       </div>
       )}
       </div>

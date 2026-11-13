@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger } from "@/components/ui/select";
 import { BrandDot } from "@/components/brand-switcher";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useBrandList } from "@/lib/brands-context";
 import type { ImageRecord } from "@/lib/types";
 import { cn } from "cn";
@@ -58,11 +59,18 @@ export function SetBrandSelect({
 
   return (
     <Select value={image.brandId ?? NO_BRAND} onValueChange={(v) => v && handleChange(v)}>
-      <SelectTrigger size="sm" className={triggerClassName} title="Set brand">
-        <span className="flex items-center justify-center">
-          <Bookmark className={iconClassName} />
-        </span>
-      </SelectTrigger>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <SelectTrigger size="sm" className={triggerClassName}>
+              <span className="flex items-center justify-center">
+                <Bookmark className={iconClassName} />
+              </span>
+            </SelectTrigger>
+          }
+        />
+        <TooltipContent>Set brand</TooltipContent>
+      </Tooltip>
       {/* The trigger is a small icon button; brand names need more room than its width. */}
       <SelectContent className="min-w-52">
         <SelectItem value={NO_BRAND}>No brand</SelectItem>

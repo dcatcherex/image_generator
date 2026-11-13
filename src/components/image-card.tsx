@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Image from "next/image";
-import { Download, Heart, Layers, Loader2, Tag as TagIcon, Trash2, TriangleAlert, Wand2 } from "lucide-react";
+import { Download, Heart, Layers, Loader2, Tag as TagIcon, Trash2, TriangleAlert, Type, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -13,7 +13,6 @@ import {
   SelectItem,
   SelectTrigger,
 } from "@/components/ui/select";
-import { formatDuration, imageCostLabel } from "@/lib/pricing";
 import { ASSIGNABLE_TAGS } from "@/lib/tags";
 import { useReadOnly } from "@/lib/read-only";
 import type { ImageRecord } from "@/lib/types";
@@ -33,6 +32,7 @@ export function ImageCard({
   image,
   onImageUpdated,
   onDelete,
+  onUseAsPrompt,
   onUseAsReference,
   onRefine,
   onOpen,
@@ -42,6 +42,7 @@ export function ImageCard({
   image: ImageRecord;
   onImageUpdated: (image: ImageRecord) => void;
   onDelete: (image: ImageRecord) => void;
+  onUseAsPrompt: (image: ImageRecord) => void;
   onUseAsReference: (image: ImageRecord) => void;
   onRefine: (image: ImageRecord) => void;
   onOpen?: () => void;
@@ -156,16 +157,19 @@ export function ImageCard({
       </div>
 
       <div className="absolute inset-x-0 bottom-0 p-2 flex flex-col gap-1.5 bg-gradient-to-t from-background/90 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
-        <p className="text-[11px] line-clamp-2 text-foreground/90">{image.prompt}</p>
-        {imageCostLabel(image) && (
-          <p className="text-[10px] font-mono text-muted-foreground">
-            {imageCostLabel(image)}
-            {image.durationMs != null && ` · ${formatDuration(image.durationMs)}`}
-          </p>
-        )}
         <div className="flex gap-1">
           {!readOnly && (
           <>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button size="icon" variant="secondary" className="size-7" onClick={() => onUseAsPrompt(image)}>
+                  <Type className="size-3.5" />
+                </Button>
+              }
+            />
+            <TooltipContent>Use as prompt</TooltipContent>
+          </Tooltip>
           <Tooltip>
             <TooltipTrigger
               render={
@@ -187,15 +191,21 @@ export function ImageCard({
             <TooltipContent>Refine</TooltipContent>
           </Tooltip>
           <Select value={image.tag ?? NO_TAG} onValueChange={(v) => v && handleTagChange(v)}>
-            <SelectTrigger
-              size="sm"
-              className="h-7 w-7 justify-center border-none bg-secondary p-0 hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)] [&>svg]:hidden"
-              title="Set tag"
-            >
-              <span className="flex items-center justify-center">
-                <TagIcon className="size-3.5" />
-              </span>
-            </SelectTrigger>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <SelectTrigger
+                    size="sm"
+                    className="h-7 w-7 justify-center border-none bg-secondary p-0 hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)] [&>svg]:hidden"
+                  >
+                    <span className="flex items-center justify-center">
+                      <TagIcon className="size-3.5" />
+                    </span>
+                  </SelectTrigger>
+                }
+              />
+              <TooltipContent>Set tag</TooltipContent>
+            </Tooltip>
             <SelectContent>
               <SelectItem value={NO_TAG}>No tag</SelectItem>
               {ASSIGNABLE_TAGS.map((t) => (
