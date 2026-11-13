@@ -683,6 +683,11 @@ export function GeneratePanel({
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-1.5">
               <Label htmlFor="prompt">Prompt</Label>
+              {referenceItems.length > 1 && (
+                <span className="text-xs text-muted-foreground">
+                  Type <kbd className="rounded border px-1 font-mono">@</kbd> to mention an image
+                </span>
+              )}
               {placeholderCount > 0 && (
                 <mark
                   id="prompt-placeholders"
@@ -748,6 +753,8 @@ export function GeneratePanel({
             id="prompt"
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
+            onValueChange={setPrompt}
+            mentionImages={referenceItems}
             onKeyDown={handlePromptKeyDown}
             aria-describedby={placeholderCount > 0 ? "prompt-placeholders" : undefined}
             placeholder={
@@ -778,6 +785,8 @@ export function GeneratePanel({
                 autoFocus
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
+                onValueChange={setPrompt}
+                mentionImages={referenceItems}
                 onKeyDown={handlePromptKeyDown}
                 aria-label="Prompt"
                 className="field-sizing-fixed h-[65vh] resize-none overflow-y-auto"

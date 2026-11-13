@@ -81,9 +81,9 @@ export type AssistRequest = {
 };
 
 const REFERENCE_RULES = `Reference image rules:
-- The model cannot see the app's thumbnails; it only knows the images by their order. Refer to them ONLY as "image 1", "image 2", "image 3"... — never "the left picture", "the boy photo", "the first upload".
+- The model cannot see the app's thumbnails; it only knows the images by their order. Refer to them ONLY with the app's mention tokens @image1, @image2, @image3... (exactly that form, no space; the app converts them to "image 1" etc.) — never "the left picture", "the boy photo", "the first upload". Keep any @imageN mentions the user already wrote.
 - Image 1 is the main image being edited; the result keeps its framing unless told otherwise.
-- The app automatically prepends an "Inputs:" list stating each image's role and note, so do NOT write an "Inputs:" / "Reference images:" list yourself. In the prompt, say what to TAKE from each image and how they combine (e.g. "the pose from image 2, the outfit from image 3, everything else from image 1"), where each element goes in the result, and what must stay unchanged.
+- The app automatically prepends an "Inputs:" list stating each image's role and note, so do NOT write an "Inputs:" / "Reference images:" list yourself. In the prompt, say what to TAKE from each image and how they combine (e.g. "the pose from @image2, the outfit from @image3, everything else from @image1"), where each element goes in the result, and what must stay unchanged.
 - With several characters/subjects, give each one its position (left / middle / right, foreground / background) and say to keep each one's hair, outfit, colors and proportions exactly as in its own image.
 - A "style" image contributes only palette, texture and medium — never its subject. A "logo" image must be reproduced exactly.`;
 
@@ -106,9 +106,9 @@ export function assistInstructions(req: AssistRequest): string {
     const n = req.references.length;
     parts.push(
       n === 1
-        ? `This is an EDIT of one input image ("the reference image" / "image 1"). Keep edit-style wording: say what to change only, and what to preserve.`
+        ? `This is an EDIT of one input image ("the reference image" / @image1). Keep edit-style wording: say what to change only, and what to preserve.`
         : `This is an EDIT with ${n} input images.\n\n${REFERENCE_RULES}`,
-      `The user's reference images (roles and notes they set in the app):\n${describeReferences(req.references, req.hasMarkup)}\nIf a role is just "reference" with no note, infer its likely purpose from the prompt and context; if that stays unclear, write a placeholder like <what to take from image ${n}> instead of guessing.`
+      `The user's reference images (roles and notes they set in the app):\n${describeReferences(req.references, req.hasMarkup)}\nIf a role is just "reference" with no note, infer its likely purpose from the prompt and context; if that stays unclear, write a placeholder like <what to take from @image${n}> instead of guessing.`
     );
   } else {
     parts.push("This is a new GENERATION (no input images unless the prompt says otherwise).");

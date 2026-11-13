@@ -4,6 +4,7 @@
 // lives in this file.
 
 import type { BrandColor, LogoVariant } from "./brands";
+import { resolveMentions } from "./mentions";
 
 export type ReferenceRole = "subject" | "style" | "item" | "scene" | "logo" | "other";
 
@@ -118,7 +119,8 @@ export function buildPrompt(inputs: PromptInputs): string {
     );
   }
 
-  sections.push(inputs.base.trim());
+  // @image1-style mentions from the prompt box become the guide's "image 1" wording.
+  sections.push(resolveMentions(inputs.base.trim()));
 
   const changeOnly = inputs.changeOnly?.trim();
   if (changeOnly) sections.push(`Change only: ${changeOnly}`);
