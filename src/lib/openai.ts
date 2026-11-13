@@ -150,6 +150,14 @@ export const ASPECT_RATIOS = [
 
 // Size tiers pick the target pixel area an aspect ratio is fitted to. 4K is above the
 // largest non-experimental area (2560x1440), so it's labelled experimental.
+// Extra Size option that takes an exact WIDTHxHEIGHT instead of a ratio + tier.
+export const CUSTOM_SIZE = "Custom";
+
+/** Rounds a pixel edge to the nearest multiple of 16 the API accepts (minimum 16). */
+export function snapEdge(v: number): number {
+  return Math.max(16, Math.round(v / 16) * 16);
+}
+
 export const SIZE_TIERS = [
   { id: "1K", label: "1K", area: 1536 * 1024 },
   { id: "2K", label: "2K", area: 2560 * 1440 },

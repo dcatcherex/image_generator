@@ -128,7 +128,7 @@ const SECTIONS: Array<{ id: string; label: string; icon: typeof BookOpen; body: 
       <>
         <H>Size and size tier</H>
         <P>
-          <K>Size</K> picks the aspect ratio; <K>Size tier</K> picks the resolution. The label shows the exact pixels, for example 16:9 is {sizeFromAspectRatio(16, 9, "1K")} at 1K, {sizeFromAspectRatio(16, 9, "2K")} at 2K and {sizeFromAspectRatio(16, 9, "4K")} at 4K.
+          <K>Size</K> picks the aspect ratio; <K>Size tier</K> picks the resolution. Each option and the hint under the field show the exact pixels, for example 16:9 is {sizeFromAspectRatio(16, 9, "1K")} at 1K, {sizeFromAspectRatio(16, 9, "2K")} at 2K and {sizeFromAspectRatio(16, 9, "4K")} at 4K. Choose <K>Custom</K> at the bottom of the list to type an exact width and height; edges snap to multiples of 16 and the tier is ignored.
         </P>
         <List>
           {SIZE_TIERS.map((t) => (

@@ -178,6 +178,30 @@ Lighting: softbox key light, gentle rim light, clean reflections
 Constraints: accurate product proportions, no extra logos or text`,
     params: { aspect: "4:5", quality: "high" },
   },
+  {
+    // 8 stickers in a 4x2 grid on 16:9 at 2K (cells ~640x720), separated by transparent
+    // gaps so each can be cropped and fitted to LINE's 370x320 max. Use an original
+    // character: LINE rejects sets based on characters you don't hold rights to.
+    id: "line-sticker-sheet",
+    label: "LINE sticker sheet",
+    mode: "generate",
+    scaffold: `Type: LINE messenger sticker sheet of 8 stickers for an original mascot
+Character: <hairstyle silhouette, primary color, signature accessory, species traits>
+Layout: 4 columns × 2 rows grid on a wide 16:9 canvas. Each sticker centered in its own equal cell, filling about 80% of it, with wide empty transparent gaps between cells. No sticker touches another or the canvas edge. No grid lines or borders.
+Each sticker: one pose with a big readable expression, one short caption in chunky wobbly hand-drawn lettering, optional small doodles (dots, arrows, sweat drops, sparkles), all wrapped in a thick slightly uneven white die-cut outline
+Stickers (left to right, top row then bottom row):
+1. <pose / expression> — "<caption>"
+2. <pose / expression> — "<caption>"
+3. <pose / expression> — "<caption>"
+4. <pose / expression> — "<caption>"
+5. <pose / expression> — "<caption>"
+6. <pose / expression> — "<caption>"
+7. <pose / expression> — "<caption>"
+8. <pose / expression> — "<caption>"
+Style: adorably quirky, askew 2D hand-drawn character, deliberately imperfect childlike graffiti drawing, big head tiny body, slightly misaligned face, loose tremulous lines, flat matte color blocks with slightly off-register hand-painted fills, 2–4 colors taken from the character
+Constraints: same character design in all 8 stickers, each caption exactly once and spelled exactly as written, no other text, fully transparent background outside the white outlines, no checkerboard, no logos, no watermarks`,
+    params: { aspect: "16:9", tier: "2K", quality: "high", background: "transparent", format: "png" },
+  },
 
   // ---- Social posts (by layout type; BRANDS.md decision 9) ----
   // Look and palette come from the active brand's Brand section, so these scaffolds only
@@ -269,6 +293,28 @@ Layout: event name largest, date and place easy to find at a glance`,
 Keep the layout, imagery and copy unchanged.`,
     preserve: ["layout", "text", "identity"],
     brandInclude: { palette: true, style: true, logo: true, standingText: false },
+  },
+  {
+    // Edit-mode twin of "line-sticker-sheet": the reference image is the character sheet,
+    // so every sheet in a set keeps the same design.
+    id: "line-sticker-sheet-edit",
+    label: "LINE sticker sheet",
+    mode: "edit",
+    scaffold: `Create a LINE messenger sticker sheet of 8 stickers featuring the character from the reference image. Keep its exact hairstyle silhouette, colors, accessory, proportions and wobbly hand-drawn style; do not redesign it.
+Layout: 4 columns × 2 rows grid on a wide 16:9 canvas. Each sticker centered in its own equal cell, filling about 80% of it, with wide empty transparent gaps between cells. No sticker touches another or the canvas edge. No grid lines or borders.
+Each sticker: one pose with a big readable expression, one short caption in chunky wobbly hand-drawn lettering, optional small doodles (dots, arrows, sweat drops, sparkles), all wrapped in a thick slightly uneven white die-cut outline
+Stickers (left to right, top row then bottom row):
+1. <pose / expression> — "<caption>"
+2. <pose / expression> — "<caption>"
+3. <pose / expression> — "<caption>"
+4. <pose / expression> — "<caption>"
+5. <pose / expression> — "<caption>"
+6. <pose / expression> — "<caption>"
+7. <pose / expression> — "<caption>"
+8. <pose / expression> — "<caption>"
+Constraints: each caption exactly once and spelled exactly as written, no other text, fully transparent background outside the white outlines, no checkerboard, no logos, no watermarks`,
+    params: { aspect: "16:9", tier: "2K", quality: "high", background: "transparent", format: "png" },
+    preserve: ["identity"],
   },
   {
     id: "product-cutout",

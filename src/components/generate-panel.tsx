@@ -26,6 +26,7 @@ import { ReferenceImagesPicker } from "@/components/reference-images-picker";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   ASPECT_RATIOS,
+  CUSTOM_SIZE,
   COMPLEXITY_OPTIONS,
   DEFAULT_COMPLEXITY,
   MODEL,
@@ -42,6 +43,8 @@ import {
   QUALITY_OPTIONS,
   SIZE_TIERS,
   sizeFromAspectRatio,
+  snapEdge,
+  validateSize,
   type SizeTier,
 } from "@/lib/openai";
 import {
@@ -163,6 +166,9 @@ export function GeneratePanel({
 }) {
   const [aspectRatio, setAspectRatio] = useState<string>("auto");
   const [tier, setTier] = useState<SizeTier>("1K");
+  // Custom size edges, kept as strings so the fields can be cleared while typing.
+  const [customW, setCustomW] = useState("1536");
+  const [customH, setCustomH] = useState("1024");
   const [quality, setQuality] = useState<string>("high");
   // What the user picked; `format` below is what is actually sent (SVG can fall back to PNG).
   const [formatValue, setFormat] = useState<string>("webp");
@@ -283,10 +289,19 @@ export function GeneratePanel({
   const previewOn = visibility.preview && livePreview.preview && previewApplies && streams;
   const partials = previewOn ? PREVIEW_PARTIALS : 0;
 
+  const isCustomSize = aspectRatio === CUSTOM_SIZE;
   const size = useMemo(() => {
+    if (isCustomSize) return `${Number(customW) || 0}x${Number(customH) || 0}`;
     const selected = ASPECT_RATIOS.find((ar) => ar.label === aspectRatio);
     return selected?.ratio ? sizeFromAspectRatio(selected.ratio[0], selected.ratio[1], tier) : "auto";
-  }, [aspectRatio, tier]);
+  }, [aspectRatio, tier, isCustomSize, customW, customH]);
+  const sizeError = isCustomSize ? validateSize(size) : null;
+
+  // Snap a typed edge to the nearest multiple of 16 when the field loses focus.
+  function snapCustom(value: string, set: (v: string) => void) {
+    const v = Number(value);
+    if (Number.isFinite(v) && v > 0) set(String(snapEdge(v)));
+  }
 
   const inputImages = referenceItems.length + (logoOn ? 1 : 0);
   const draft = useMemo(() => {
@@ -406,6 +421,10 @@ export function GeneratePanel({
       toast.error("Enter a prompt first");
       return;
     }
+    if (sizeError) {
+      toast.error(sizeError);
+      return;
+    }
     const tagValue = tag === NO_TAG ? null : tag;
     setQueue((q) => [
       ...q,
@@ -421,6 +440,10 @@ export function GeneratePanel({
 
   async function handleSubmit() {
     const tagValue = tag === NO_TAG ? null : tag;
+    if (sizeError) {
+      toast.error(sizeError);
+      return;
+    }
 
     if (!isEditMode && economyMode) {
       // The current draft (if any) is submitted alongside whatever's already queued,
@@ -949,25 +972,43 @@ export function GeneratePanel({
             </div>
           )}
           {visibility.size && <div className="flex flex-col gap-1.5">
-            <Label>Size {size !== "auto" && <span className="text-muted-foreground font-normal">({size})</span>}</Label>
+            <Label>Size</Label>
             <Select value={aspectRatio} onValueChange={(v) => v && setAspectRatio(v)}>
               <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {ASPECT_RATIOS.map((ar) => (
                   <SelectItem key={ar.label} value={ar.label}>
-                    <span className="flex items-center gap-2">
+                    <span className="flex w-full items-center gap-2">
                       <AspectRatioIcon ratio={ar.ratio} />
                       {ar.label}
+                      {/* Pixels at the current tier, so the choice is visible before picking. */}
+                      {ar.ratio && (
+                        <span className="ml-auto pl-3 text-xs tabular-nums text-muted-foreground">
+                          {sizeFromAspectRatio(ar.ratio[0], ar.ratio[1], tier).replace("x", "×")}
+                        </span>
+                      )}
                     </span>
                   </SelectItem>
                 ))}
+                <SelectSeparator />
+                <SelectItem value={CUSTOM_SIZE}>
+                  <span className="flex w-full items-center gap-2">
+                    <PenLine className="size-3.5" />
+                    Custom
+                    <span className="ml-auto pl-3 text-xs text-muted-foreground">W × H</span>
+                  </span>
+                </SelectItem>
               </SelectContent>
             </Select>
+            {/* Always-visible pixel hint under the field; Auto lets the model choose. */}
+            <p className="text-xs tabular-nums text-muted-foreground">
+              {size === "auto" ? "Model picks the size" : `${size.replace("x", " × ")} px`}
+            </p>
           </div>}
           {visibility.tier && <div className="flex flex-col gap-1.5">
             <Label>Size tier</Label>
             {/* Auto lets the model pick dimensions, so there's nothing for a tier to scale. */}
-            <Select value={tier} onValueChange={(v) => v && setTier(v as SizeTier)} disabled={aspectRatio === "auto"}>
+            <Select value={tier} onValueChange={(v) => v && setTier(v as SizeTier)} disabled={size === "auto" || isCustomSize}>
               <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {SIZE_TIERS.map((t) => (
@@ -976,6 +1017,39 @@ export function GeneratePanel({
               </SelectContent>
             </Select>
           </div>}
+          {visibility.size && isCustomSize && (
+            <div className="col-span-full flex flex-col gap-1.5">
+              <Label>Custom size (px)</Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="number"
+                  inputMode="numeric"
+                  min={16}
+                  step={16}
+                  aria-label="Width in pixels"
+                  value={customW}
+                  onChange={(e) => setCustomW(e.target.value)}
+                  onBlur={() => snapCustom(customW, setCustomW)}
+                  aria-invalid={Boolean(sizeError)}
+                />
+                <span className="text-muted-foreground">×</span>
+                <Input
+                  type="number"
+                  inputMode="numeric"
+                  min={16}
+                  step={16}
+                  aria-label="Height in pixels"
+                  value={customH}
+                  onChange={(e) => setCustomH(e.target.value)}
+                  onBlur={() => snapCustom(customH, setCustomH)}
+                  aria-invalid={Boolean(sizeError)}
+                />
+              </div>
+              <p className={`text-xs ${sizeError ? "text-destructive" : "text-muted-foreground"}`}>
+                {sizeError ?? "Multiples of 16, ratio up to 3:1, max edge 3840."}
+              </p>
+            </div>
+          )}
           {visibility.quality && <div className="flex flex-col gap-1.5">
             <Label>Quality</Label>
             <Select value={quality} onValueChange={(v) => v && setQuality(v)}>
