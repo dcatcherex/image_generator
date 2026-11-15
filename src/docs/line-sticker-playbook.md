@@ -11,7 +11,7 @@ How to make a LINE sticker set with this app, from character idea to files ready
 Use this when you only need a reminder.
 
 - [ ] **1. Character sheet:** Presets → *Character sheet* · Background **transparent** · Model **Sunburst** → save the best result
-- [ ] **2. Sticker sheets:** load the character sheet as a reference image → Presets → *LINE sticker sheet* · Model **Sunburst** → fill in 8 poses + captions → generate
+- [ ] **2. Sticker sheets:** load the character sheet as a reference image → Presets → *LINE sticker sheet (white border / no border)* · Model **Sunburst** → fill in 8 poses + captions → generate
 - [ ] **3. Check each sheet:** same character in all 8 · captions spelled right · background really transparent · stickers not touching
 - [ ] **4. Split:** `pnpm stickers:split sheet1.png out\my-set`, then `pnpm stickers:split sheet2.png out\my-set --start 9` …
 - [ ] **5. Check the files:** count = 8 / 16 / 24 / 32 / 40 · each looks right on its own · `main.png` and `tab.png` exist
@@ -68,7 +68,7 @@ Each sheet gives **8 stickers**. Make as many sheets as your set needs (2 sheets
 **App settings**
 
 1. Add the character sheet from Step 1 under **Reference images**. The Presets menu switches to *Edit presets…*.
-2. Presets → **LINE sticker sheet**. This sets:
+2. Presets → **LINE sticker sheet (white border)** or **(no border)**. The white die-cut border keeps dark line art readable on dark chat backgrounds (LINE dark mode); *no border* leaves the character's own line art as the edge. Both set:
 
 | Field | Value set by the preset |
 |---|---|
@@ -238,7 +238,7 @@ LINE's guideline doesn't specify file names; the script's `01.png`, `main.png`, 
 
 | What | Where |
 |---|---|
-| Preset text and settings | `src/lib/prompt-presets.ts` (ids `line-sticker-sheet`, `line-sticker-sheet-edit`) |
+| Preset text and settings | `src/lib/prompt-presets.ts` (ids `line-sticker-sheet`, `line-sticker-sheet-edit`, plus `-no-border` variants) |
 | Splitting script | `scripts/split-stickers.mjs` (`pnpm stickers:split`) |
 | Size / Custom size options | `src/lib/openai.ts`, `src/components/generate-panel.tsx` |
 | GPT Image prompting guide | `src/docs/gpt-image-2.6-prompting guide.md` |

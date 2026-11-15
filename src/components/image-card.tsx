@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/select";
 import { ASSIGNABLE_TAGS } from "@/lib/tags";
 import { useReadOnly } from "@/lib/read-only";
+import { downloadUrl } from "@/lib/download";
 import type { ImageRecord } from "@/lib/types";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { ImageBrandBadge, SetBrandSelect } from "@/components/image-brand";
@@ -223,7 +224,7 @@ export function ImageCard({
           <Tooltip>
             <TooltipTrigger
               render={
-                <a href={image.blobUrl} download target="_blank" rel="noreferrer">
+                <a href={downloadUrl(image.blobUrl)} download>
                   <Button size="icon" variant="secondary" className="size-7">
                     <Download className="size-3.5" />
                   </Button>

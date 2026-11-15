@@ -17,6 +17,7 @@ import { formatDuration, imageCostLabel } from "@/lib/pricing";
 import { ASSIGNABLE_TAGS } from "@/lib/tags";
 import { getVersionChain } from "@/lib/version-chain";
 import { useReadOnly } from "@/lib/read-only";
+import { downloadUrl } from "@/lib/download";
 import { ImageBrandBadge, SetBrandSelect } from "@/components/image-brand";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { ImageRecord } from "@/lib/types";
@@ -213,7 +214,7 @@ export function ImageLightbox({
                   aria-label="Download"
                   className="rounded-full bg-secondary/80 hover:bg-secondary"
                   nativeButton={false}
-                  render={<a href={image.blobUrl} download target="_blank" rel="noreferrer" />}
+                  render={<a href={downloadUrl(image.blobUrl)} download />}
                 >
                   <Download className="size-4" />
                 </Button>

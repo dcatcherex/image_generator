@@ -683,11 +683,6 @@ export function GeneratePanel({
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-1.5">
               <Label htmlFor="prompt">Prompt</Label>
-              {referenceItems.length > 1 && (
-                <span className="text-xs text-muted-foreground">
-                  Type <kbd className="rounded border px-1 font-mono">@</kbd> to mention an image
-                </span>
-              )}
               {placeholderCount > 0 && (
                 <mark
                   id="prompt-placeholders"
@@ -702,12 +697,6 @@ export function GeneratePanel({
               )}
             </div>
             <div className="flex items-center gap-2">
-              {isEditMode && (
-                <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                  <Paintbrush2 className="size-3" /> Editing {referenceItems.length} image
-                  {referenceItems.length > 1 ? "s" : ""}
-                </span>
-              )}
               <Tooltip>
                 <TooltipTrigger
                   render={
@@ -759,7 +748,9 @@ export function GeneratePanel({
             aria-describedby={placeholderCount > 0 ? "prompt-placeholders" : undefined}
             placeholder={
               isEditMode
-                ? "Describe how to change the reference image(s)..."
+                ? referenceItems.length > 1
+                  ? "Describe how to change the reference images... Type @ to mention one"
+                  : "Describe how to change the reference image..."
                 : "A children's book illustration of a fox reading under a lantern..."
             }
             className="field-sizing-content min-h-36 max-h-[55vh] resize-none overflow-y-auto"
