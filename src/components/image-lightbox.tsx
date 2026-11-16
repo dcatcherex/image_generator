@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
-import { ChevronLeft, ChevronRight, Download, Heart, Layers, Loader2, Tag as TagIcon, Trash2, Type, Wand2, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, Heart, LayoutGrid, Layers, Loader2, Tag as TagIcon, Trash2, Type, Wand2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -22,6 +22,8 @@ import { ImageBrandBadge, SetBrandSelect } from "@/components/image-brand";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { ImageRecord } from "@/lib/types";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
+import { LineRichMenuDialog } from "@/components/line-rich-menu-dialog";
+import { looksLikeRichMenu } from "@/lib/line-rich-menu";
 
 const NO_TAG = "No tag";
 
@@ -52,14 +54,15 @@ export function ImageLightbox({
   const readOnly = useReadOnly();
   const [deleting, setDeleting] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [exportingLine, setExportingLine] = useState(false);
   const image = images[index];
   const activeThumbRef = useRef<HTMLButtonElement>(null);
   const lastWheelRef = useRef(0);
 
   useEffect(() => {
-    // Paused while the delete confirmation is open: its Escape should only close the dialog,
-    // and arrow keys must not swap the image being confirmed.
-    if (confirmingDelete) return;
+    // Paused while the delete confirmation or LINE export is open: its Escape should only close
+    // the dialog, and arrow keys must not swap the image it's about.
+    if (confirmingDelete || exportingLine) return;
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key === "Escape") onClose();
       else if (e.key === "ArrowLeft") onIndexChange(Math.max(0, index - 1));
@@ -67,7 +70,7 @@ export function ImageLightbox({
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [index, images.length, onClose, onIndexChange, confirmingDelete]);
+  }, [index, images.length, onClose, onIndexChange, confirmingDelete, exportingLine]);
 
   useEffect(() => {
     document.body.style.overflow = "hidden";
@@ -83,7 +86,7 @@ export function ImageLightbox({
   // Wraps around at both ends so scrolling feels continuous, like the reference site's
   // rail. Throttled because trackpads fire many small wheel events per physical scroll.
   function handleWheel(e: React.WheelEvent) {
-    if (confirmingDelete) return;
+    if (confirmingDelete || exportingLine) return;
     const now = Date.now();
     if (now - lastWheelRef.current < 350) return;
     if (Math.abs(e.deltaY) < 10) return;
@@ -222,6 +225,24 @@ export function ImageLightbox({
             />
             <TooltipContent>Download</TooltipContent>
           </Tooltip>
+          {looksLikeRichMenu(image.prompt, image.size) && (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  size="icon"
+                  variant="secondary"
+                  aria-label="Export for LINE rich menu"
+                  className="rounded-full bg-secondary/80 hover:bg-secondary"
+                  onClick={() => setExportingLine(true)}
+                >
+                  <LayoutGrid className="size-4" />
+                </Button>
+              }
+            />
+            <TooltipContent>Export for LINE rich menu</TooltipContent>
+          </Tooltip>
+          )}
           <Tooltip>
             <TooltipTrigger
               render={
@@ -435,6 +456,9 @@ export function ImageLightbox({
         onOpenChange={setConfirmingDelete}
         onConfirm={handleDelete}
       />
+      {exportingLine && (
+        <LineRichMenuDialog key={image.id} image={image} open onOpenChange={setExportingLine} />
+      )}
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import type { SizeTier } from "./openai";
 import type { BrandInclude, PreserveId } from "./prompt-builder";
+import { RICH_MENU_GEN_SIZE, RICH_MENU_TEMPLATES, richMenuScaffold } from "./line-rich-menu";
 
 // Client-side preset library adapted from the examples in OpenAI's GPT Image 2.5 prompting
 // guide. A preset only fills the plain prompt textarea with a labelled-section scaffold (edit
@@ -13,14 +14,15 @@ export type PresetParams = Partial<{
   quality: string;
   background: string;
   format: string;
+  size: string; // exact "WIDTHxHEIGHT"; selects the Custom size option (overrides aspect/tier)
 }>;
 
 export type PromptPreset = {
   id: string;
   label: string;
   mode: "generate" | "edit";
-  // Social presets are listed under their own heading in the picker.
-  group?: "social";
+  // Grouped presets are listed under their own heading in the picker.
+  group?: "social" | "rich-menu";
   scaffold: string;
   params?: PresetParams;
   preserve?: PreserveId[];
@@ -113,6 +115,18 @@ Constraints: each caption exactly once and spelled exactly as written, no other 
     preserve: ["identity"],
   };
 }
+
+// LINE rich menus: one preset per Rich Menu Maker layout, generated at the nearest API size
+// and resized to LINE's exact size by "Export for LINE" on the image (see line-rich-menu.ts).
+const RICH_MENU_PRESETS: PromptPreset[] = RICH_MENU_TEMPLATES.map((t) => ({
+  id: `line-rich-menu-${t.id}`,
+  label: t.label,
+  mode: "generate",
+  group: "rich-menu",
+  scaffold: richMenuScaffold(t),
+  params: { size: RICH_MENU_GEN_SIZE[t.kind], quality: "high", format: "png", background: "opaque" },
+  brandInclude: { palette: true, style: true, logo: false, standingText: false },
+}));
 
 export const PROMPT_PRESETS: PromptPreset[] = [
   // ---- Generate ----
@@ -412,4 +426,5 @@ Match its scale, perspective, reflections and shadows to the scene.`,
     params: { quality: "high" },
     preserve: ["camera", "lighting"],
   },
+  ...RICH_MENU_PRESETS,
 ];

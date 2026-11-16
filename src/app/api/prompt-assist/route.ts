@@ -15,6 +15,17 @@ export const maxDuration = 120;
 
 const MAX_PROMPT = 20_000;
 const MAX_CONTEXT = 4_000;
+// Reference images arrive downscaled by the client (~1024px JPEG, ~100-300 KB each).
+const MAX_IMAGES = 8;
+const MAX_IMAGE_CHARS = 3_000_000;
+const DATA_URL = /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/;
+
+function sanitizeImages(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((x): x is string => typeof x === "string" && x.length <= MAX_IMAGE_CHARS && DATA_URL.test(x))
+    .slice(0, MAX_IMAGES);
+}
 
 export async function POST(req: NextRequest) {
   // Spends money on a text model, so owner-only like the image routes.
@@ -44,13 +55,26 @@ export async function POST(req: NextRequest) {
     // Reuse the generate routes' validation of role/note entries.
     references: (sanitizePromptInputs({ base: "-", referenceRoles: body?.references })?.referenceRoles ?? []).slice(0, 16),
     hasMarkup: Boolean(body?.hasMarkup),
+    images: sanitizeImages(body?.images),
   };
 
   try {
+    const inputText = assistInput(request);
     const response = await getOpenAI().responses.create({
       model: assistModel(),
       instructions: assistInstructions(request),
-      input: assistInput(request),
+      input:
+        request.images.length === 0
+          ? inputText
+          : [
+              {
+                role: "user",
+                content: [
+                  { type: "input_text", text: inputText },
+                  ...request.images.map((url) => ({ type: "input_image" as const, image_url: url, detail: "auto" as const })),
+                ],
+              },
+            ],
     });
     const text = cleanAssistOutput(response.output_text ?? "");
     if (!text) return NextResponse.json({ error: "The model returned an empty prompt" }, { status: 502 });

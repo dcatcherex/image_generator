@@ -30,6 +30,9 @@ export const CONTEXT_CHIPS = [
   "Watercolor",
   "Flat vector",
   "3D clay",
+  "Use the reference as style & colors",
+  "Suggest character actions & labels",
+  "Match the reference character exactly",
 ] as const;
 
 /** The text model that writes prompts; overridable since accounts differ in what they can call. */
@@ -60,8 +63,19 @@ const STICKER_TIPS = `LINE sticker rules (from the project's LINE sticker playbo
 - Captions are short (1–3 words), each in double quotes, written exactly as they should appear. No URLs, app names, ads or emoji characters in captions.
 - Pose descriptions are concrete and visual: body action + facial expression + one small prop or effect (e.g. "Melting into a puddle, flattened body, eyes half closed").`;
 
+const RICH_MENU_TIPS = `LINE rich menu rules (from the project's playbook, Part 2):
+- Each numbered button is one tap area of a LINE Official Account menu. Keep the "Type: LINE rich menu (...)" line, the Layout line and each button's position text exactly as written; the app relies on them.
+- Labels are 1–3 words (a single short word in Thai is ideal), each a distinct, common OA action that fits the business: e.g. book / promotion / menu / shop / contact / location / opening hours / member card / FAQ / news. The big banner tile is usually a promotion or the brand's hero.
+- Icons are simple and instantly readable for their label. If a character reference is given, a tile's visual can be the character acting out that button's action (e.g. waving for "Contact", holding a gift for "Promotion"), in the same pose language as the reference.
+- Every tile uses the same style, palette and line weight so the menu reads as one panel.`;
+
+const SEEN_IMAGES = `You can SEE the reference images (attached after the text, in order: the first is image 1). Use them as the source of truth:
+- Describe what you actually see in concrete words when the prompt needs it: the character's defining traits (hair/silhouette, colors, outfit, accessory, proportions), the palette (name the main colors), line weight, shading and medium.
+- For a style/guideline image, carry over its palette, medium and mood — not its subject. For a character image, keep the character exactly and invent only new poses, expressions and props that suit its personality.
+- Never invent traits that contradict the images.`;
+
 const MODE_TASKS: Record<AssistMode, string> = {
-  fill: `TASK: Fill in every placeholder in the prompt. Placeholders look like <...> or [...]. Replace each one (including its brackets) with concrete, specific content that fits the rest of the prompt, the user's context and the image's purpose. Keep ALL other text exactly as written — same wording, order, line breaks and numbering. When a list has several similar placeholders (e.g. 8 stickers), make every entry different and varied. No placeholder may remain.`,
+  fill: `TASK: Fill in every placeholder in the prompt. Placeholders look like <...> or [...]. An id after "LINE rich menu" in a "Type:" line, such as (large-6) or [large-6], is a fixed marker, not a placeholder: keep it exactly.Replace each placeholder (including its brackets) with concrete, specific content that fits the rest of the prompt, the user's context, the reference images and the image's purpose. Content the user already wrote is a decision: keep it and keep the rest consistent with it (same theme, character, tone). If the user left an obviously unfinished fragment (e.g. "character ac"), complete it in the spirit it was started. Keep ALL other text exactly as written — same wording, order, line breaks and numbering. When a list has several similar placeholders (e.g. 8 stickers, 6 buttons), make every entry different and varied. The user's context may contain instructions about HOW to fill (e.g. "suggest character actions and labels", "use the reference as style"); follow them. No placeholder may remain.`,
   improve: `TASK: Rewrite the prompt so it follows the best practices above. Keep the user's intent, subject, any quoted text and any concrete details. Add what is missing (purpose, composition, lighting/medium, constraints, exact-text rules), organise it into labeled sections when it is more than a sentence or two, and remove vague filler. If the prompt contains placeholders (<...> or [...]) that you cannot fill confidently, keep them; otherwise fill them.`,
   context: `TASK: Adapt the prompt to the user's context (for example a culture, country, province/region, characteristics, audience, language or style). Weave the context in concretely: local scenery, architecture, food, clothing, festivals, landmarks, colors and motifs that genuinely belong to it — specific and respectful, not stereotyped. Keep the prompt's structure, intent and any quoted text that is not affected. If the context names a caption language, write the captions in that language. Fill any placeholders the context lets you fill.`,
   write: `TASK: Write a complete, ready-to-use image prompt from the user's idea and context, following the best practices above. Use labeled sections. Make reasonable creative choices instead of leaving placeholders.`,
@@ -78,6 +92,8 @@ export type AssistRequest = {
   references: ReferenceRoleEntry[];
   /** A markup overlay (circled areas) is attached to image 1. */
   hasMarkup: boolean;
+  /** Downscaled reference images (data URLs, same order as `references`) the text model sees. */
+  images: string[];
 };
 
 const REFERENCE_RULES = `Reference image rules:
@@ -99,14 +115,17 @@ function describeReferences(refs: ReferenceRoleEntry[], hasMarkup: boolean): str
 
 export function assistInstructions(req: AssistRequest): string {
   const sticker = /sticker|line messenger/i.test(req.prompt) || /sticker/i.test(req.context);
+  const richMenu = /line rich menu/i.test(req.prompt) || /rich menu/i.test(req.context);
   const parts = [GUIDE];
   if (sticker) parts.push(STICKER_TIPS);
+  if (richMenu) parts.push(RICH_MENU_TIPS);
   parts.push(MODE_TASKS[req.mode]);
+  if (req.images.length > 0) parts.push(SEEN_IMAGES);
   if (req.isEdit && req.references.length > 0) {
     const n = req.references.length;
     parts.push(
       n === 1
-        ? `This is an EDIT of one input image ("the reference image" / @image1). Keep edit-style wording: say what to change only, and what to preserve.`
+        ? `There is one input image ("the reference image" / @image1). If the prompt describes a brand-new composition (a "Type:" line such as a sticker sheet, rich menu, poster or character sheet), the image is a character/style guide, not a canvas: say what to take from it (e.g. "the character from @image1, keep its design exactly") and don't use change-only wording. Otherwise treat it as an EDIT: say what to change only, and what to preserve.`
         : `This is an EDIT with ${n} input images.\n\n${REFERENCE_RULES}`,
       `The user's reference images (roles and notes they set in the app):\n${describeReferences(req.references, req.hasMarkup)}\nIf a role is just "reference" with no note, infer its likely purpose from the prompt and context; if that stays unclear, write a placeholder like <what to take from @image${n}> instead of guessing.`
     );

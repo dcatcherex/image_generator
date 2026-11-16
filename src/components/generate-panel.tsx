@@ -406,6 +406,12 @@ export function GeneratePanel({
     setPrompt(presetScaffold(preset, activeBrand?.language ?? null));
     if (p.aspect) setAspectRatio(p.aspect);
     if (p.tier) setTier(p.tier);
+    const exact = p.size ? /^(\d+)x(\d+)$/.exec(p.size) : null;
+    if (exact) {
+      setAspectRatio(CUSTOM_SIZE);
+      setCustomW(exact[1]);
+      setCustomH(exact[2]);
+    }
     if (p.quality) setQuality(p.quality);
     // Set format and background together (not via setBackground) so a preset's pair, e.g.
     // transparent + png, can't trip the JPEG fallback against the previous format.
@@ -420,6 +426,7 @@ export function GeneratePanel({
       p.quality && `quality ${p.quality}`,
       p.aspect,
       p.tier,
+      p.size,
       p.background === "transparent" && "transparent",
       p.format && p.format.toUpperCase(),
       activeBrand && preset.brandInclude?.logo && "logo on",
@@ -663,6 +670,13 @@ export function GeneratePanel({
                           <SelectItem key={x.id} value={x.id}>{x.label}</SelectItem>
                         ))}
                       </SelectGroup>
+                      <SelectSeparator />
+                      <SelectGroup>
+                        <SelectLabel>LINE rich menu</SelectLabel>
+                        {PROMPT_PRESETS.filter((x) => x.group === "rich-menu").map((x) => (
+                          <SelectItem key={x.id} value={x.id}>{x.label}</SelectItem>
+                        ))}
+                      </SelectGroup>
                     </>
                   )}
                 </SelectContent>
@@ -766,6 +780,7 @@ export function GeneratePanel({
               role: item.role ?? defaultReferenceRole(i),
               ...(item.note?.trim() ? { note: item.note.trim() } : {}),
             }))}
+            referenceFiles={referenceItems.map((item) => item.file)}
             hasMarkup={Boolean(activeMarkup)}
             language={activeBrand?.language ?? null}
           />

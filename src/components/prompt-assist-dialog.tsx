@@ -6,9 +6,33 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { ASSIST_MODE_LABELS, CONTEXT_CHIPS, type AssistMode } from "@/lib/prompt-assist";
 import type { ReferenceRoleEntry } from "@/lib/prompt-builder";
+
+// The text model only needs enough detail to read a character's traits and a palette, so
+// references go up small: keeps the request well under Vercel's 4.5 MB body limit.
+const ASSIST_IMAGE_EDGE = 1024;
+const ASSIST_MAX_IMAGES = 6;
+
+async function toAssistDataUrl(file: File): Promise<string> {
+  const bitmap = await createImageBitmap(file);
+  try {
+    const scale = Math.min(1, ASSIST_IMAGE_EDGE / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(bitmap.width * scale);
+    canvas.height = Math.round(bitmap.height * scale);
+    const ctx = canvas.getContext("2d")!;
+    // JPEG has no alpha: put transparent stickers/characters on white, not black.
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL("image/jpeg", 0.85);
+  } finally {
+    bitmap.close();
+  }
+}
 
 /**
  * "AI assist" for the prompt box: fills <placeholders>, rewrites the prompt with the GPT Image
@@ -23,6 +47,7 @@ export function PromptAssistDialog({
   placeholderCount,
   isEdit,
   references,
+  referenceFiles,
   hasMarkup,
   language,
 }: {
@@ -33,12 +58,16 @@ export function PromptAssistDialog({
   placeholderCount: number;
   isEdit: boolean;
   references: ReferenceRoleEntry[];
+  /** The reference image files, same order as `references`, for the model to look at. */
+  referenceFiles: File[];
   hasMarkup: boolean;
   language: string | null;
 }) {
   // Kept across openings so the same context can be reused on the next sheet / prompt.
   const [context, setContext] = useState("");
   const [running, setRunning] = useState<AssistMode | null>(null);
+  const [showImages, setShowImages] = useState(true);
+  const sendImages = showImages && referenceFiles.length > 0;
   const hasPrompt = prompt.trim().length > 0;
   const hasContext = context.trim().length > 0;
 
@@ -53,10 +82,13 @@ export function PromptAssistDialog({
     setRunning(mode);
     const before = prompt;
     try {
+      const images = sendImages
+        ? await Promise.all(referenceFiles.slice(0, ASSIST_MAX_IMAGES).map(toAssistDataUrl))
+        : [];
       const res = await fetch("/api/prompt-assist", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode, prompt, context, isEdit, references, hasMarkup, language }),
+        body: JSON.stringify({ mode, prompt, context, isEdit, references, hasMarkup, language, images }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || typeof data.prompt !== "string") {
@@ -111,12 +143,12 @@ export function PromptAssistDialog({
         </DialogDescription>
 
         <div className="flex flex-col gap-2">
-          <Label htmlFor="assist-context">Context or idea (optional)</Label>
+          <Label htmlFor="assist-context">Context, idea or instructions (optional)</Label>
           <Textarea
             id="assist-context"
             value={context}
             onChange={(e) => setContext(e.target.value)}
-            placeholder="e.g. Thai, Chiang Mai, a lazy cat who loves som tam, office worker humor, watercolor"
+            placeholder="Context or instructions, e.g. Thai café, suggest a character action and label for each button, use the reference as style"
             className="min-h-20 resize-y"
           />
           <div className="flex flex-wrap gap-1.5">
@@ -131,10 +163,15 @@ export function PromptAssistDialog({
               </button>
             ))}
           </div>
-          {references.length > 1 && (
-            <p className="text-xs text-muted-foreground">
-              Knows your {references.length} reference images by number and uses their roles and notes — set those below the prompt for better results.
-            </p>
+          {referenceFiles.length > 0 && (
+            <label className="flex items-start gap-2 text-xs text-muted-foreground">
+              <Switch checked={showImages} onCheckedChange={setShowImages} size="sm" className="mt-0.5" />
+              <span>
+                Let AI see the {referenceFiles.length > 1 ? `${Math.min(referenceFiles.length, ASSIST_MAX_IMAGES)} reference images` : "reference image"}{" "}
+                (character, style, colors), plus their roles and notes from below the prompt.
+                {referenceFiles.length > ASSIST_MAX_IMAGES && ` Only the first ${ASSIST_MAX_IMAGES} are sent.`}
+              </span>
+            </label>
           )}
           {language && (
             <p className="text-xs text-muted-foreground">Brand language: {language} (used for captions and in-image text)</p>

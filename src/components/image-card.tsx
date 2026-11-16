@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Image from "next/image";
-import { Download, Heart, Layers, Loader2, Tag as TagIcon, Trash2, TriangleAlert, Type, Wand2 } from "lucide-react";
+import { Download, Heart, LayoutGrid, Layers, Loader2, Tag as TagIcon, Trash2, TriangleAlert, Type, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -18,6 +18,8 @@ import { useReadOnly } from "@/lib/read-only";
 import { downloadUrl } from "@/lib/download";
 import type { ImageRecord } from "@/lib/types";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
+import { LineRichMenuDialog } from "@/components/line-rich-menu-dialog";
+import { looksLikeRichMenu } from "@/lib/line-rich-menu";
 import { ImageBrandBadge, SetBrandSelect } from "@/components/image-brand";
 
 const NO_TAG = "No tag";
@@ -55,6 +57,7 @@ export function ImageCard({
   const readOnly = useReadOnly();
   const [deleting, setDeleting] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [exportingLine, setExportingLine] = useState(false);
 
   async function handleDelete() {
     setDeleting(true);
@@ -233,6 +236,18 @@ export function ImageCard({
             />
             <TooltipContent>Download</TooltipContent>
           </Tooltip>
+          {looksLikeRichMenu(image.prompt, image.size) && (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button size="icon" variant="secondary" className="size-7" onClick={() => setExportingLine(true)}>
+                  <LayoutGrid className="size-3.5" />
+                </Button>
+              }
+            />
+            <TooltipContent>Export for LINE rich menu</TooltipContent>
+          </Tooltip>
+          )}
           {!readOnly && (
           <Tooltip>
             <TooltipTrigger
@@ -259,6 +274,7 @@ export function ImageCard({
         onOpenChange={setConfirmingDelete}
         onConfirm={handleDelete}
       />
+      {exportingLine && <LineRichMenuDialog image={image} open onOpenChange={setExportingLine} />}
     </div>
   );
 }

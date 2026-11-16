@@ -2,6 +2,8 @@
 
 How to make a LINE sticker set with this app, from character idea to files ready to upload to LINE Creators Market.
 
+Making a **rich menu** for a LINE Official Account instead? Jump to [Part 2: LINE rich menu](#part-2-line-rich-menu).
+
 > **Before anything else:** use an **original character**. LINE's review guideline rejects images that infringe copyrights (5.1), "make use of copyrights that lack a clear owner, such as fan fiction" (5.2), or use material without proven permission (5.4). Anime, game, brand and celebrity characters are out. Fan-art prompts are fine for practice, not for submission.
 
 ---
@@ -242,3 +244,105 @@ LINE's guideline doesn't specify file names; the script's `01.png`, `main.png`, 
 | Splitting script | `scripts/split-stickers.mjs` (`pnpm stickers:split`) |
 | Size / Custom size options | `src/lib/openai.ts`, `src/components/generate-panel.tsx` |
 | GPT Image prompting guide | `src/docs/gpt-image-2.6-prompting guide.md` |
+
+---
+
+# Part 2: LINE rich menu
+
+A rich menu is the tappable button panel a LINE Official Account shows under the chat. It is **one image** plus a list of rectangular **tap areas** set in JSON. The artwork has to line up with those rectangles, so every rich menu preset here is tied to a fixed layout template.
+
+## Quick checklist
+
+- [ ] **1. Pick a layout:** Presets → *LINE rich menu* → e.g. *Large 6 (3×2)*. (Pick a brand first if you have one: its palette and style are applied.)
+- [ ] **2. Fill in the buttons:** for each numbered line, replace the icon and `label: "<...>"`. Keep labels to 1–3 words.
+- [ ] **3. Generate** and check: labels spelled right, nothing crossing a tile boundary.
+- [ ] **4. Export:** on the image, click **Export for LINE rich menu** (grid icon). Check the dashed tap areas line up with the buttons.
+- [ ] **5. Download JPEG** (exact 2500×1686 or 2500×843, ≤ 1 MB) and **Copy rich menu JSON**.
+- [ ] **6. Upload:** either in LINE Official Account Manager (pick the same layout there), or with the Messaging API using the JSON.
+
+## Step 1: Pick a layout
+
+These match the templates in LINE Official Account Manager / Rich Menu Maker, so you can pick the same one there.
+
+| Preset | Size | Buttons |
+|---|---|---|
+| Large 6 (3×2) | Large | 3 columns × 2 rows |
+| Large 4 (2×2) | Large | 2 × 2 |
+| Large hero + 3 | Large | wide banner on top, 3 buttons below |
+| Large left + 2 | Large | tall button left, 2 stacked right |
+| Large 2 rows | Large | 2 full-width bands |
+| Large single | Large | 1 |
+| Compact 3 | Compact | 3 in a row |
+| Compact 2 | Compact | 2 in a row |
+| Compact wide + 1 | Compact | banner in the left 2/3, 1 button right |
+| Compact single | Compact | 1 |
+
+**Large** covers about half the chat screen and suits 4–6 actions. **Compact** is a slim bar for 1–3 actions and leaves more room for the chat.
+
+The preset sets **Size = Custom 2496×1680** (Large) or **2496×832** (Compact), quality high, PNG, opaque. The API only accepts edges that are multiples of 16, so it can't make LINE's 2500×1686 / 2500×843 directly; the export step resizes (a 0.2% difference, invisible).
+
+## Step 2: Fill in the buttons
+
+Each numbered line in the prompt is one tap area, in the order **left to right, top to bottom**, the same order as the JSON areas. Big tiles (banners, the tall left button) get a `visual:` line for a photo or illustration; small tiles get an `icon:`.
+
+**Let AI fill it in:** add your character or style image as a reference, then open **AI assist** (wand icon) → write what you want in the context box (e.g. "Thai café, suggest a character action and label for each button, use the reference as style and colors", or tap the chips) → **Fill placeholders**. With *Let AI see the reference images* on, the assist model looks at the images, so it describes your actual character and palette instead of guessing. Anything you already typed (a banner name, a label) is kept, and unfinished bits get completed.
+
+Tips:
+
+- **Short labels** (จองคิว, โปรโมชั่น, ติดต่อเรา) render more reliably than sentences. Quality `xhigh` helps with Thai.
+- Keep the `(large-6)`-style marker in the `Type:` line. The export dialog reads it to pick the matching layout, and the `label: "..."` lines become the JSON's placeholder message texts.
+- Don't put text near the outer edge: phones with rounded corners and LINE's own UI can clip it.
+
+## Step 3: Export for LINE
+
+Open the image (card or lightbox) and click the **grid icon**. It appears on images made from a rich menu preset, or any image already at a rich menu shape.
+
+- **Layout** is preselected from the prompt; change it if you're exporting an image made another way.
+- **Dashed boxes** are the exact tap areas. If a button's artwork crosses a line, users will tap the wrong action: regenerate, or switch to the layout the image actually has.
+- **Download JPEG** crops to the exact size (centered), puts transparency on white, and lowers JPEG quality step by step until the file is ≤ 1 MB.
+- **Copy rich menu JSON** gives a body for `POST https://api.line.me/v2/bot/richmenu` with the exact `bounds` per area. Every action is a placeholder `{ "type": "message", "text": "<label>" }`; change it to what the button should do, e.g. `{ "type": "uri", "uri": "https://..." }` or `{ "type": "postback", "data": "action=book" }`. Change `chatBarText` (the bar label, max 14 characters) too.
+
+## Step 4: Upload
+
+**Without code (LINE Official Account Manager):** Chat screen → Rich menus → Create → choose the same template → upload the JPEG → set each area's action. You don't need the JSON for this.
+
+**With the Messaging API:**
+
+1. `POST /v2/bot/richmenu` with the JSON → returns `richMenuId`.
+2. `POST https://api-data.line.me/v2/bot/richmenu/{richMenuId}/content` with the JPEG (`Content-Type: image/jpeg`).
+3. `POST /v2/bot/user/all/richmenu/{richMenuId}` to make it the default, or link it per user (`/v2/bot/user/{userId}/richmenu/{richMenuId}`).
+
+**Tabs:** a tabbed menu is several rich menus with the same layout, each drawing a different tab as active, switched with a `richmenuswitch` action and rich menu aliases. To make the second tab, load the first menu as a reference and ask for the same design with tab B highlighted.
+
+## Troubleshooting
+
+| Problem | Fix |
+|---|---|
+| Tap areas don't line up with the buttons | Regenerate; the prompt already names exact divider positions. If one tile keeps drifting, simplify its content. |
+| Export says "Couldn't get the JPEG under 1 MB" | Very detailed photo backgrounds compress badly. Ask for flatter tiles or simpler backgrounds. |
+| Grid icon isn't on the image | The prompt lost its `LINE rich menu (...)` marker and the image isn't a rich menu shape. Generate with a rich menu preset. |
+| Rich menu presets missing from the picker | With reference images loaded only edit presets show. Remove the references. |
+| Edges cropped in the export | The image isn't 2496×1680 / 2496×832. Check the Size was left on Custom from the preset. |
+
+## Rich menu specs
+
+From LINE's [rich menu overview](https://developers.line.biz/en/docs/messaging-api/rich-menus-overview/) and [Messaging API reference](https://developers.line.biz/en/reference/messaging-api/#upload-rich-menu-image).
+
+| Rule | Value |
+|---|---|
+| Format | JPEG or PNG |
+| File size | ≤ 1 MB |
+| Width | 800–2500 px |
+| Height | ≥ 250 px |
+| Aspect (width ÷ height) | ≥ 1.45 |
+| Standard sizes | Large 2500×1686, 1200×810, 800×540 · Compact 2500×843, 1200×405, 800×270 |
+| Tap areas | up to 20 |
+| `chatBarText` | ≤ 14 characters |
+
+### Where things live in this project
+
+| What | Where |
+|---|---|
+| Layout templates, scaffold, JSON and JPEG export | `src/lib/line-rich-menu.ts` |
+| Presets (ids `line-rich-menu-<template>`) | `src/lib/prompt-presets.ts` |
+| Export dialog | `src/components/line-rich-menu-dialog.tsx` |
