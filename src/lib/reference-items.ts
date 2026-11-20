@@ -91,6 +91,19 @@ export async function referenceItemFromImage(image: ImageRecord): Promise<Refere
   };
 }
 
+/** Drops repeats of the same gallery image (or the same key), keeping the first occurrence. */
+export function dedupeReferences(items: ReferenceItem[]): ReferenceItem[] {
+  const seen = new Set<string>();
+  const out = items.filter((r) => {
+    const id = r.sourceImageId ? `gallery-${r.sourceImageId}` : r.key;
+    if (seen.has(id) || seen.has(r.key)) return false;
+    seen.add(id);
+    seen.add(r.key);
+    return true;
+  });
+  return out.length === items.length ? items : out;
+}
+
 export function referenceItemFromFile(file: File): ReferenceItem {
   return {
     key: `upload-${file.name}-${file.size}-${crypto.randomUUID()}`,

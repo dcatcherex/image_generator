@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import Image from "next/image";
 import { Upload, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -26,14 +26,47 @@ export function ReferenceImagesPicker({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isImage = (f: File) => f.type.startsWith("image/");
 
+  // Drops files that are already a reference (or repeated within this batch), matched by name,
+  // size and modified time, so the same image can't be added twice.
+  function withoutDuplicates(files: File[]): File[] {
+    const id = (f: File) => `${f.name}|${f.size}|${f.lastModified}`;
+    const seen = new Set(items.map((r) => id(r.file)));
+    return files.filter((f) => {
+      const k = id(f);
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+  }
+
   function addFiles(files: FileList | File[] | null) {
     if (!files) return;
-    const imageFiles = Array.from(files).filter(isImage);
+    const imageFiles = withoutDuplicates(Array.from(files).filter(isImage));
     if (imageFiles.length === 0) return;
     onChange([...items, ...imageFiles.map(referenceItemFromFile)]);
   }
 
   const { isDraggingOver, dropProps } = useFileDrop({ accept: isImage, onFiles: addFiles });
+
+  // Ctrl+V anywhere on the page adds a copied image or screenshot as a reference. Listening on
+  // the window means no focus target is needed. Text pastes into a field are left alone, and
+  // so is anything pasted inside an open dialog, which sits on top of this picker.
+  useEffect(() => {
+    function onPaste(e: ClipboardEvent) {
+      const data = e.clipboardData;
+      if (!data) return;
+      const target = e.target instanceof Element ? e.target : null;
+      if (target?.closest('[role="dialog"]')) return;
+      const images = Array.from(data.files).filter((f) => f.type.startsWith("image/"));
+      if (images.length === 0) return;
+      const inTextField = !!target?.closest('input, textarea, [contenteditable="true"]');
+      if (inTextField && data.types.includes("text/plain")) return;
+      e.preventDefault();
+      addFiles(images);
+    }
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  });
 
   function updateItem(key: string, patch: Partial<ReferenceItem>) {
     onChange(items.map((r) => (r.key === key ? { ...r, ...patch } : r)));
@@ -73,6 +106,7 @@ export function ReferenceImagesPicker({
         <Button
           variant="ghost"
           onClick={() => fileInputRef.current?.click()}
+          title="Upload, drop, or paste (Ctrl+V) an image"
           className="size-16 rounded-md border border-dashed text-muted-foreground hover:bg-muted/50"
         >
           <Upload className="size-4" />

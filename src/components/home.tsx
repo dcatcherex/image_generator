@@ -16,7 +16,7 @@ import { cn } from "cn";
 import { ReadOnlyProvider } from "@/lib/read-only";
 import { BrandsProvider } from "@/lib/brands-context";
 import { toast } from "sonner";
-import { referenceItemFromImage, type ReferenceItem } from "@/lib/reference-items";
+import { dedupeReferences, referenceItemFromImage, type ReferenceItem } from "@/lib/reference-items";
 import { useImageStream } from "@/lib/use-image-stream";
 import { useGalleryView } from "@/lib/use-gallery-view";
 import { usePanelOptions } from "@/lib/use-panel-options";
@@ -40,7 +40,15 @@ export function Home({ readOnly }: { readOnly: boolean }) {
   const [query, setQuery] = useState("");
   const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [tagFilter, setTagFilter] = useState<string>(ALL_TAGS_FILTER);
-  const [referenceItems, setReferenceItems] = useState<ReferenceItem[]>([]);
+  const [rawReferenceItems, setRawReferenceItems] = useState<ReferenceItem[]>([]);
+  // Every write goes through dedupeReferences, so the same image can never be a reference twice
+  // (and React never sees two children with the same key), whichever path added it.
+  const referenceItems = useMemo(() => dedupeReferences(rawReferenceItems), [rawReferenceItems]);
+  const setReferenceItems = useCallback(
+    (update: ReferenceItem[] | ((prev: ReferenceItem[]) => ReferenceItem[])) =>
+      setRawReferenceItems((prev) => dedupeReferences(typeof update === "function" ? update(prev) : update)),
+    []
+  );
   const [pendingBatchJobs, setPendingBatchJobs] = useState<BatchJobRecord[]>([]);
   const [isEditing, setIsEditing] = useState(false);
   const [exactText, setExactText] = useState("");
@@ -128,11 +136,20 @@ export function Home({ readOnly }: { readOnly: boolean }) {
     setImages((prev) => prev.map((i) => (i.id === image.id ? image : i)));
   }, []);
 
-  const handleUseAsReference = useCallback(async (image: ImageRecord) => {
-    const item = await referenceItemFromImage(image);
-    setReferenceItems((prev) => [...prev, item]);
-    setMobileTab("create");
-  }, []);
+  const handleUseAsReference = useCallback(
+    async (image: ImageRecord) => {
+      setMobileTab("create");
+      // The same gallery image can only be a reference once.
+      if (referenceItems.some((r) => r.sourceImageId === image.id)) {
+        toast.info("That image is already a reference");
+        return;
+      }
+      const item = await referenceItemFromImage(image);
+      // Re-check against the latest list in case a second click landed while this one was fetching.
+      setReferenceItems((prev) => (prev.some((r) => r.sourceImageId === image.id) ? prev : [...prev, item]));
+    },
+    [referenceItems, setReferenceItems]
+  );
 
   const { activeBrand, brands, setActive: setActiveBrand } = brandState;
 
@@ -165,7 +182,7 @@ export function Home({ readOnly }: { readOnly: boolean }) {
       setMobileTab("create");
       setTimeout(() => document.getElementById("prompt")?.focus(), 0);
     },
-    [activeBrand, brands, setActiveBrand]
+    [activeBrand, brands, setActiveBrand, setReferenceItems]
   );
 
   const handleUseAsPrompt = useCallback((image: ImageRecord) => {
